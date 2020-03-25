@@ -33,8 +33,8 @@ int main(int argc, char* argv[])
 	Logger::setLogDir("logs/"+simName);
 
 	// Nodes
-	auto n1 = Node::make("n1");
-	auto n2 = Node::make("n2");
+	auto n1 = SimNode::make("n1");
+	auto n2 = SimNode::make("n2");
     //auto n3 = Node::make("n3");
 
 	// Components
@@ -44,10 +44,10 @@ int main(int argc, char* argv[])
 	auto rL = Resistor::make("r_load");
 
 	// Topology
-	vs->connect({ Node::GND, n1 });
+	vs->connect({ SimNode::GND, n1 });
 	rl->connect({ n1, n2 });
     //ll->connect({ n2, n3 });
-    rL->connect({ Node::GND, n2 });
+    rL->connect({ SimNode::GND, n2 });
 
 	// Parameters
 	vs->setParameters(Complex(10000, 0));
@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
     //ll->setParameters(1);
 	rL->setParameters(1000);
 
-	auto sys = SystemTopology(50, SystemNodeList{ Node::GND, n1, n2}, SystemComponentList{vs, rl, rL});
+	auto sys = SystemTopology(50, SystemNodeList{SimNode::GND, n1, n2}, SystemComponentList{vs, rl, rL});
 	Simulation sim(simName, sys, timeStep, 1.0, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.run();

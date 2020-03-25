@@ -115,8 +115,8 @@ void EMT::Ph1::Resistor::daeResidual(double ttime, const double state[], const d
 	// state[x+1] = nodal_equation_2
 	// ...
 
-    int Pos1 = simNode(0);
-    int Pos2 = simNode(1);
+    int Pos1 = matrixNodeIndex(0);
+    int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component
 	int n_offset_1 = c_offset + Pos1 + 1;// current offset for first nodal equation
 	int n_offset_2 = c_offset + Pos2 + 1;// current offset for second nodal equation
