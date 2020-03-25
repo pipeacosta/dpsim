@@ -79,6 +79,7 @@ if(WITH_SUNDIALS)
 
 	set(DAE_SOURCES
 		DAE/DAE_DP_test.cpp
+		DAE/DAE_EMT_test.cpp
 	)
 endif()
 

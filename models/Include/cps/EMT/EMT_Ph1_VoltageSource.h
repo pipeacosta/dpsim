@@ -10,6 +10,7 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
+#include <cps/Solver/DAEInterface.h>
 
 namespace CPS {
 namespace EMT {
@@ -24,6 +25,7 @@ namespace Ph1 {
 	/// a new equation ej - ek = V is added to the problem.
 	class VoltageSource :
 		public MNAInterface,
+		public DAEInterface,
 		public SimPowerComp<Real>,
 		public SharedFactory<VoltageSource> {
 	protected:
@@ -85,6 +87,12 @@ namespace Ph1 {
 			VoltageSource& mVoltageSource;
 			Attribute<Matrix>::Ptr mLeftVector;
 		};
+
+		// #### DAE Section ####
+		/// Residual function for DAE Solver
+		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+		///Voltage Getter
+		Complex daeInitialize();
 	};
 }
 }

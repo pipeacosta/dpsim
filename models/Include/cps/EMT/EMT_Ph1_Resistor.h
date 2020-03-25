@@ -12,6 +12,7 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
+#include <cps/Solver/DAEInterface.h>
 #include <cps/Base/Base_Ph1_Resistor.h>
 
 namespace CPS {
@@ -21,14 +22,15 @@ namespace Ph1 {
 	class Resistor :
 		public Base::Ph1::Resistor,
 		public MNAInterface,
+		public DAEInterface,
 		public SimPowerComp<Real>,
 		public SharedFactory<Resistor> {
 	protected:
 	public:
 		/// Defines UID, name, component parameters and logging level
-		Resistor(String uid, String name, Logger::Level logLevel = Logger::Level::off);
+		Resistor(String uid, String name, Logger::Level logLevel = Logger::Level::info);
 		/// Defines name, component parameters and logging level
-		Resistor(String name, Logger::Level logLevel = Logger::Level::off)
+		Resistor(String name, Logger::Level logLevel = Logger::Level::info)
 			: Resistor(name, name, logLevel) { }
 
 		SimPowerComp<Real>::Ptr clone(String name);
@@ -65,6 +67,12 @@ namespace Ph1 {
 			Resistor& mResistor;
 			Attribute<Matrix>::Ptr mLeftVector;
 		};
+
+		// #### DAE Section ####
+		///Residual Function for DAE Solver
+		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+		///Voltage Getter
+		Complex daeInitialize();
 	};
 }
 }

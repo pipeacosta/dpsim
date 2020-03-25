@@ -53,6 +53,18 @@ void EMT::Ph1::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matr
 	mEquivCond = timeStep / (2.0 * mInductance);
 	// Update internal state
 	mEquivCurrent = mEquivCond * mIntfVoltage(0,0) + mIntfCurrent(0,0);
+	mSLog->info(
+		"\n--- mnaInitialize ---"
+		"\nmEquivCond: {:f}"
+		"\nmIntfVoltage(0,0): {:f}"
+		"\nmIntfCurrent(0,0): {:f}"
+		"\nmEquivCurrent: {:f}"
+		"\n--- Initialization mnaInitialize finished ---",
+		mEquivCond,
+		mIntfCurrent(0,0),
+		mIntfVoltage(0,0),
+		mIntfCurrent(0,0),
+		mEquivCurrent);
 
 	mMnaTasks.push_back(std::make_shared<MnaPreStep>(*this));
 	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
@@ -99,5 +111,17 @@ void EMT::Ph1::Inductor::mnaUpdateVoltage(const Matrix& leftVector) {
 
 void EMT::Ph1::Inductor::mnaUpdateCurrent(const Matrix& leftVector) {
 	mIntfCurrent(0,0) = mEquivCond * mIntfVoltage(0,0) + mEquivCurrent;
+	mSLog->info(
+		"\n--- mnaUpdateCurrent ---"
+		"\nmEquivCond: {:f}"
+		"\nmIntfVoltage(0,0): {:f}"
+		"\nmIntfCurrent(0,0): {:f}"
+		"\nmEquivCurrent: {:f}"
+		"\n--- Initialization mnaUpdateCurrent finished ---",
+		mEquivCond,
+		mIntfCurrent(0,0),
+		mIntfVoltage(0,0),
+		mIntfCurrent(0,0),
+		mEquivCurrent);
 }
 

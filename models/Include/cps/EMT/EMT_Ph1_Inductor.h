@@ -34,9 +34,9 @@ namespace Ph1 {
 		Real mEquivCond;
 	public:
 		/// Defines UID, name, component parameters and logging level
-		Inductor(String uid, String name, Logger::Level logLevel = Logger::Level::off);
+		Inductor(String uid, String name, Logger::Level logLevel = Logger::Level::info);
 		/// Defines name and logging level
-		Inductor(String name, Logger::Level logLevel = Logger::Level::off)
+		Inductor(String name, Logger::Level logLevel = Logger::Level::info)
 			: Inductor(name, name, logLevel) { }
 
 		SimPowerComp<Real>::Ptr clone(String name);

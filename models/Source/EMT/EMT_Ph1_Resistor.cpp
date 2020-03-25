@@ -43,6 +43,7 @@ void EMT::Ph1::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 		initialSingleVoltage(1).real());
 }
 
+// #### MNA functions ####
 void EMT::Ph1::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	MNAInterface::mnaInitialize(omega, timeStep);
 	updateMatrixNodeIndices();
@@ -89,4 +90,44 @@ void EMT::Ph1::Resistor::mnaUpdateVoltage(const Matrix& leftVector) {
 
 void EMT::Ph1::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
 	mIntfCurrent(0,0) = mIntfVoltage(0,0) / mResistance;
+	mSLog->info(
+		"\n--- mnaUpdateCurrent ---"
+		"\nmIntfCurrent(0,0): {:f}"
+		"\n--- mnaUpdateCurrent finished ---",
+		mIntfCurrent(0,0));
+}
+
+// #### DAE functions ####
+
+void EMT::Ph1::Resistor::daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) {
+	// new state vector definintion:
+	// state[0]=node0_voltage
+	// state[1]=node1_voltage
+	// ....
+	// state[n]=noden_voltage
+	// state[n+1]=component0_voltage
+	// state[n+2]=component0_inductance (not yet implemented)
+	// ...
+	// state[m-1]=componentm_voltage
+	// state[m]=componentm_inductance
+	// ...
+	// state[x] = nodal_equation_1
+	// state[x+1] = nodal_equation_2
+	// ...
+
+    int Pos1 = simNode(0);
+    int Pos2 = simNode(1);
+	int c_offset = off[0]+off[1]; //current offset for component
+	int n_offset_1 = c_offset + Pos1 + 1;// current offset for first nodal equation
+	int n_offset_2 = c_offset + Pos2 + 1;// current offset for second nodal equation
+	resid[c_offset] = (state[Pos2]-state[Pos1]) - state[c_offset]; // Voltage equation for Resistor
+	//resid[c_offset+1] = ; //TODO : add inductance equation
+    resid[n_offset_1] += 1.0/ mResistance * state[c_offset];
+    resid[n_offset_2] += 1.0/ mResistance * state[c_offset];
+	off[1] += 1;
+}
+
+Complex EMT::Ph1::Resistor::daeInitialize() {
+	std::cout << "Resistor inizialized" << std::endl;
+	return mIntfVoltage(0,0);
 }
