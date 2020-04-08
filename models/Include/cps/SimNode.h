@@ -106,6 +106,7 @@ namespace CPS {
 		const Task::List& mnaTasks() {
 			return mMnaTasks;
 		}
+			
 		///
 		class MnaPostStepHarm : public Task {
 		public:
@@ -147,4 +148,7 @@ namespace CPS {
 
 	template<>
 	void SimNode<Complex>::setVoltage(Complex newVoltage);
+
+	template<>
+	void SimNode<Real>::setVoltage(double newVoltage);
 }

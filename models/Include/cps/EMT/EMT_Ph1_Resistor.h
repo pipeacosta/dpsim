@@ -71,8 +71,10 @@ namespace Ph1 {
 		// #### DAE Section ####
 		///Residual Function for DAE Solver
 		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
-		///Voltage Getter
-		Complex daeInitialize();
+		///
+		void daeInitialize(double state[], double dstate_dt[], int& counter);
+		///
+		void daePostStep(const double state[], int& counter, double time);
 	};
 }
 }

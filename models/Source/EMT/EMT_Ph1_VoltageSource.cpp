@@ -92,35 +92,66 @@ void EMT::Ph1::VoltageSource::mnaUpdateCurrent(const Matrix& leftVector) {
 	mIntfCurrent(0,0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex());
 }
 
-void EMT::Ph1::VoltageSource::daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off){
-	/* new state vector definintion:
-		state[0]=node0_voltage
-		state[1]=node1_voltage
-		....
-		state[n]=noden_voltage
-		state[n+1]=component0_voltage
-		state[n+2]=component0_inductance (not yet implemented)
-		...
-		state[m-1]=componentm_voltage
-		state[m]=componentm_inductance
-	*/
+// #### DAE functions ####
 
-    int Pos1 = matrixNodeIndex(0);
+void EMT::Ph1::VoltageSource::daeUpdateVoltage(Real time) {
+	mVoltageRef = attribute<Complex>("V_ref");
+	mSrcFreq = attribute<Real>("f_src");
+	Complex voltageRef = mVoltageRef->get();
+	Real srcFreq = mSrcFreq->get();
+	if (srcFreq > 0)
+		mIntfVoltage(0,0) = Math::abs(voltageRef) * cos(time * 2.*PI*srcFreq + Math::phase(voltageRef));
+	else
+		mIntfVoltage(0,0) = voltageRef.real();
+}
+
+void EMT::Ph1::VoltageSource::daeInitialize(double state[], double dstate_dt[], int& counter) {
+	// state[c_offset] = current through voltage source flowing into node matrixNodeIndex(1)
+
+	//update initial voltage source voltage and current
+	updateMatrixNodeIndices();
+	double ttime = 0.0; 				//TODO: ttime=initialTime
+	this->daeUpdateVoltage(ttime);
+	state[counter] = mIntfCurrent(0,0);
+	dstate_dt[counter] = 0;
+	mSLog->info("Initial voltage of VoltageSource '{:s}' = {}V", this->name(), mIntfVoltage(0,0));
+	mSLog->info("Added current of VoltageSource '{:s}' to state vector, initial value i_{:s} = {}A", this->name(), this->name(), state[counter]);
+	counter++;
+}
+
+void EMT::Ph1::VoltageSource::daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off){
+	// state[c_offset] = current through voltage source flowing into node matrixNodeIndex(1)
+	// resid[c_offset] = v2-v1-v_s = state[Pos2] - state[Pos1] - mIntfVoltage(0,0)
+	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0)
+	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1)
+
+	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component
-	int n_offset_1 = c_offset + Pos1 +1;// current offset for first nodal equation
-	int n_offset_2 = c_offset + Pos2 +1;// current offset for second nodal equation
-	resid[c_offset] = (state[Pos2]-state[Pos1]) - state[c_offset]; // Voltage equation for Resistor
-	//resid[++c_offset] = ; //TODO : add inductance equation
-	// resid[n_offset_1] += mIntfCurrent(0, 0).real();
-	// resid[n_offset_2] += mIntfCurrent(0, 0).real();
-	resid[n_offset_1] += mIntfCurrent(0, 0);
-	resid[n_offset_2] += mIntfCurrent(0, 0);
+
+	//reset residual vector
+	//TODO: where must be reseted?????
+	resid[0] = 0.0;
+	resid[1] = 0.0;
+	resid[c_offset] = -mIntfVoltage(0,0);
+	if (terminalNotGrounded(0)) {
+		resid[c_offset] -= state[Pos1];
+		resid[Pos1] += state[c_offset];
+	}
+	if (terminalNotGrounded(1)) {
+		resid[c_offset] += state[Pos2];
+		resid[Pos2] -= state[c_offset];
+	}
+	mSLog->info("state[Pos1]={}, Pos1={}", state[Pos1], Pos1);
+	mSLog->info("state[Pos2]={}, Pos2={}", state[Pos2], Pos2);
+	mSLog->info("mIntfVoltage(0,0)={}", mIntfVoltage(0,0));
+	mSLog->info("resid[{}]={}", c_offset, resid[c_offset]);
+	mSLog->info("");
 	off[1] += 1;
 }
 
-Complex EMT::Ph1::VoltageSource::daeInitialize() {
-	std::cout << "VoltageSource inizialized" << std::endl;
-	mIntfVoltage(0,0) = Math::abs(mVoltageRef->get()) * cos(Math::phase(mVoltageRef->get()));
-	return mIntfVoltage(0,0);
+void EMT::Ph1::VoltageSource::daePostStep(const double state[], int& counter, double time) {
+	this->daeUpdateVoltage(time);
+	mIntfCurrent(0,0) = state[counter];
+	counter++;
 }

@@ -13,10 +13,12 @@
 #include <list>
 
 #include <dpsim/Solver.h>
-
-#include <cps/SystemTopology.h>
 #include <cps/Solver/DAEInterface.h>
+#include <dpsim/Scheduler.h>
+#include <cps/SimPowerComp.h>
 #include <cps/Logger.h>
+#include <dpsim/DataLogger.h>
+#include <cps/AttributeList.h>
 
 #include <ida/ida.h>
 #include <ida/ida_direct.h>
@@ -40,8 +42,11 @@ namespace DPsim {
 		Int mNEQ;
 		/// Components of the Problem
         CPS::IdentifiedObject::List mComponents;
+		CPS::DAEInterface::List mComponents2;		//change name
+
 		/// Nodes of the Problem
         CPS::SimNode<Real>::List mNodes;
+		// CPS::SimNode<Complex>::List mNodes;
 
 		// IDA simulation variables
 		/// Memory block allocated by IDA
@@ -64,13 +69,19 @@ namespace DPsim {
         long int resEval=0;
         std::vector<CPS::DAEInterface::ResFn> mResidualFunctions;
 
+		// #### Attributes related to logging ####
+		///residual vector logger
+		std::shared_ptr<DataLogger> mResidualLog;
+
 		/// Residual Function of entire System
 		static int residualFunctionWrapper(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data);
 		int residualFunction(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid);
 
 	public:
 		/// Create solve object with given parameters
-        DAESolver(String name, CPS::SystemTopology system, Real dt, Real t0);
+        DAESolver(String name, 
+			CPS::SystemTopology system, Real dt, Real t0, 
+			CPS::Logger::Level logLevel = CPS::Logger::Level::info);
 		/// Deallocate all memory
 		~DAESolver();
 		/// Initialize Components & Nodes with inital values
@@ -79,5 +90,45 @@ namespace DPsim {
 		Real step(Real time);
 
 		CPS::Task::List getTasks();
+
+		class SolveStep : public CPS::Task {
+		public:
+			SolveStep(DAESolver& solver) :
+				Task(solver.mName + ".SolveStep"), mSolver(solver) {
+				mModifiedAttributes.push_back(Scheduler::external);
+				//for (auto node : solver.mNodes) {
+				//	mModifiedAttributes.push_back(node->attribute("v"));
+				//}
+			}
+			void execute(Real time, Int timeStepCount) {
+    			mSolver.step(time);
+			}
+		private:
+			DAESolver& mSolver;
+		};
+
+		///
+		class LogTask : public CPS::Task {
+		public:
+			LogTask(DAESolver& solver) :
+				Task(solver.mName + ".Log"), mSolver(solver) {
+				// mAttributeDependencies.push_back(solver.attribute("left_vector"));
+				mModifiedAttributes.push_back(Scheduler::external);
+			}
+
+			void execute(Real time, Int timeStepCount) {
+				mSolver.log(time);
+			}
+
+		private:
+			DAESolver& mSolver;
+		};
+
+		/// Solution vector of unknown quantities
+		Matrix mResidualVector;
+		Matrix& ResidualVector() { return mResidualVector; }	///Getter
+
+		/// Log residual vector values for each simulation step
+		void log(Real time);
 	};
 }

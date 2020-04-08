@@ -210,6 +210,5 @@ void DP::Ph1::Resistor::daeResidual(double ttime, const double state[], const do
 }
 
 Complex DP::Ph1::Resistor::daeInitialize() {
-
-	 return mIntfVoltage(0,0);
+	return mIntfVoltage(0,0);
 }

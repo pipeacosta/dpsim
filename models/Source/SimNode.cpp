@@ -59,6 +59,11 @@ void SimNode<Complex>::setVoltage(Complex newVoltage) {
 }
 
 template<>
+void SimNode<Real>::setVoltage(double newVoltage) {
+	mVoltage(0, 0) = newVoltage;
+}
+
+template<>
 void SimNode<Real>::mnaUpdateVoltage(const Matrix& leftVector) {
 	if (mMatrixNodeIndex[0] >= 0) mVoltage(0,0) = Math::realFromVectorElement(leftVector, mMatrixNodeIndex[0]);
 	if (mPhaseType == PhaseType::ABC) {

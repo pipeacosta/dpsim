@@ -91,6 +91,10 @@ namespace Ph1 {
 		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///Voltage Getter
 		Complex daeInitialize();
+		// TODO
+		void daeInitialize(double state[], double dstate_dt[], int& counter){};
+		//TODO
+		void daePostStep(const double state[], int& counter, double time){};
 	};
 }
 }
