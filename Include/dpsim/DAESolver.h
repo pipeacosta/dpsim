@@ -78,6 +78,7 @@ namespace DPsim {
 
 	public:
 		/// Create solve object with given parameters
+		DAESolver(String name, 
 			CPS::SystemTopology system, Real dt, Real t0, 
 			CPS::Logger::Level logLevel = CPS::Logger::Level::info);
 		/// Deallocate all memory
@@ -126,5 +127,6 @@ namespace DPsim {
 
 		/// Log residual vector values for each simulation step
 		void log(Real time);
+
 	};
 }

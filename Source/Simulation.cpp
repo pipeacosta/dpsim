@@ -207,7 +207,8 @@ void Simulation::createMNASolver() {
 		break;
 #ifdef WITH_SUNDIALS
 			case Solver::Type::DAE:
-				solver = std::make_shared<DAESolver<VarType>>(mName + copySuffix, subnets[net], mTimeStep, 0.0);
+				solver = std::make_shared<DAESolver<VarType>>(
+						mName + copySuffix, subnets[net], mTimeStep, 0.0);
 				break;
 #endif /* WITH_SUNDIALS */
 

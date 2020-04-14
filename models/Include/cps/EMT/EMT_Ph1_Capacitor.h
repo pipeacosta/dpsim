@@ -88,6 +88,16 @@ namespace Ph1 {
 			Capacitor& mCapacitor;
 			Attribute<Matrix>::Ptr mLeftVector;
 		};
+
+		// #### DAE Section ####
+		///
+		void daeInitialize(double state[], double dstate_dt[], int& counter);
+		///Residual Function for DAE Solver
+		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+		///
+		void daePostStep(const double state[], int& counter, double time);
+		///
+		int get_numberOfStateVariables() {return 1;}
 	};
 }
 }

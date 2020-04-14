@@ -43,12 +43,10 @@ DAESolver<VarType>::DAESolver(String name,
                 throw CPS::Exception(); 
             }
             mNodes.push_back(node);
+            mNEQ +=1;
             mSLog->info("Added node {:s}", node->name());;
         }
     }
-
-    mNEQ = mDAEComponents.size() + mNodes.size();
-    mSLog->info("Number of Eqn.: {}", mNEQ);
 
     UInt matrixNodeIndexIdx = 0;
     for (UInt idx = 0; idx < mNodes.size(); idx++) {
@@ -92,6 +90,7 @@ void DAESolver<VarType>::initializeComponents() {
                                 daeComp->daeResidual(ttime, state, dstate_dt, resid, off);
                             });
         
+        mNEQ += daeComp->get_numberOfStateVariables();
         mSLog->info("Added {:s} '{:s}' to simulation.", comp->type(), comp->name());
         mSLog->flush();
     }
@@ -100,6 +99,8 @@ void DAESolver<VarType>::initializeComponents() {
 template <typename VarType>
 void DAESolver<VarType>::initialize(Real t0) {
     mSLog->info("---- Start dae initialization ----");
+    mSLog->info("Number of Eqn.: {}", mNEQ);
+
     int counter = 0;
     realtype *sval = NULL, *s_dtval = NULL;
     
@@ -111,6 +112,7 @@ void DAESolver<VarType>::initialize(Real t0) {
     if(check_retval((void *)dstate_dt, "N_VNew_Serial", 0)) 
         throw CPS::Exception();
 
+    // capturing a returned array/pointer
     sval  = N_VGetArrayPointer(state);
     s_dtval = N_VGetArrayPointer_Serial(dstate_dt);
     for (auto node : mNodes) {

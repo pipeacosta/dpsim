@@ -158,9 +158,9 @@ void EMT::Ph1::Inductor::daeResidual(double ttime, const double state[], const d
 	// dstate_dt[c_offset] = inductor current derivative
 	// state[Pos2] = voltage of node matrixNodeIndex(1)
 	// state[Pos1] = voltage of node matrixNodeIndex(0)
-	// resid[c_offset] = voltage eq of inductor: v_ind(t) -L*(d/dt)i_ind(t) = 0 --> state[Pos2] - state[Pos1] - L*dstate_dt[c_offset+1] = 0
-	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0), flowing into node matrixNodeIndex(0) ---> substract state[c_offset+1]
-	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1), flowing into node matrixNodeIndex(0) ---> add state[c_offset+1]
+	// resid[c_offset] = voltage eq of inductor: v_ind(t) -L*(d/dt)i_ind(t) = 0 --> state[Pos2] - state[Pos1] - L*dstate_dt[c_offset] = 0
+	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0) ---> substract state[c_offset]
+	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1) ---> add state[c_offset]
 
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);

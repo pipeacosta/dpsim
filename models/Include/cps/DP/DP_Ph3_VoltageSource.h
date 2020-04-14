@@ -101,6 +101,8 @@ namespace Ph3 {
 		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		//TODO
 		void daePostStep(const double state[], int& counter, double time){};
+		//TODO
+		int get_numberOfStateVariables() {return 0;}
 	};
 }
 }

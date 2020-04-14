@@ -98,6 +98,8 @@ namespace Ph1 {
 		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///
 		void daePostStep(const double state[], int& counter, double time);
+		///
+		int get_numberOfStateVariables() {return 1;}
 	};
 }
 }

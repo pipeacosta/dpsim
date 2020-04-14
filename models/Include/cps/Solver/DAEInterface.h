@@ -28,5 +28,7 @@ namespace CPS {
 		virtual void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) = 0;
 		///
 		virtual void daePostStep(const double state[], int& counter, double time)=0;
+		///
+		virtual int get_numberOfStateVariables()=0;
 	};
 }
