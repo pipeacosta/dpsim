@@ -13,9 +13,11 @@ using namespace CPS;
 
 static int check_retval(void *returnvalue, const char *funcname, int opt);
 
-DAESolver::DAESolver(String name, CPS::SystemTopology system, Real dt, Real t0, CPS::Logger::Level logLevel) :
-	Solver(name, logLevel),
-	mSystem(system),
+template <typename VarType>
+DAESolver<VarType>::DAESolver(String name, 
+    CPS::SystemTopology system, Real dt, 
+    Real t0, CPS::Logger::Level logLevel) :
+	Solver(name, logLevel), mSystem(system),
 	mTimestep(dt) {
 
     // Raw residual function
@@ -23,37 +25,29 @@ DAESolver::DAESolver(String name, CPS::SystemTopology system, Real dt, Real t0, 
     
     // Defines offset vector of the residual which is composed as follows:
     // mOffset[0] = # nodal voltage equations
-    // mOffset[1] = # of components and their respective equations (1 per component for now as inductance is not yet considered)
+    // mOffset[1] = # of components equations (1 for inductor)
 
     mOffsets.push_back(0);
     mOffsets.push_back(0);
 
     // Set initial values of all required variables and create IDA solver environment
     mSLog->info("-- Process system components");
-    for(IdentifiedObject::Ptr comp : mSystem.mComponents) {
-        auto daeComp = std::dynamic_pointer_cast<DAEInterface>(comp);
-        if (!daeComp)
-            throw CPS::Exception(); // Component does not support the DAE solver interface
-        mComponents.push_back(comp);
-        mSLog->info("Added {:s} '{:s}' to simulation.", comp->type(), comp->name());
-    }
+    this->initializeComponents();
 
+    mSLog->info("-- Process system nodes");
     for (auto baseNode : mSystem.mNodes) {
         // Add nodes to the list and ignore ground nodes.
         if (!baseNode->isGround()) {
-            auto node = std::dynamic_pointer_cast<CPS::SimNode<Real>>(baseNode);
-            // auto node = std::dynamic_pointer_cast<CPS::SimNode<Complex>>(baseNode);
+            auto node = std::dynamic_pointer_cast<CPS::SimNode<VarType>>(baseNode);
             if (!node) {
-                //TODO
-                std::cout << "-- ERROR -- " << std::endl;
-                throw CPS::Exception(); // Node does not support the DAE solver interface
+                throw CPS::Exception(); 
             }
             mNodes.push_back(node);
             mSLog->info("Added node {:s}", node->name());;
         }
     }
 
-    mNEQ = mComponents.size() + (mNodes.size());
+    mNEQ = mDAEComponents.size() + mNodes.size();
     mSLog->info("Number of Eqn.: {}", mNEQ);
 
     UInt matrixNodeIndexIdx = 0;
@@ -73,8 +67,39 @@ DAESolver::DAESolver(String name, CPS::SystemTopology system, Real dt, Real t0, 
     initialize(t0);
 }
 
-void DAESolver::initialize(Real t0) {
-    mSLog->info("---- Start initialization ----");
+template <typename VarType>
+void DAESolver<VarType>::initializeComponents() {
+    mSLog->info("-- Initialize components from power flow");
+    for(IdentifiedObject::Ptr comp : mSystem.mComponents) {
+        // Initialize componentes and add componente eqs. to state vector
+        auto emtComp = std::dynamic_pointer_cast<SimPowerComp<VarType>>(comp);
+        if (!emtComp) {
+            throw CPS::Exception();
+        }
+        // Set initial values of all components
+        emtComp->initializeFromPowerflow(mSystem.mSystemFrequency);
+        
+        auto daeComp = std::dynamic_pointer_cast<DAEInterface>(comp);
+        if (!daeComp) {
+            throw CPS::Exception();
+        }
+        mDAEComponents.push_back(daeComp);
+
+        // Register residual functions of components
+        mResidualFunctions.push_back(
+                [daeComp](double ttime, const double state[], const double dstate_dt[], double resid[],
+                            std::vector<int> &off) {
+                                daeComp->daeResidual(ttime, state, dstate_dt, resid, off);
+                            });
+        
+        mSLog->info("Added {:s} '{:s}' to simulation.", comp->type(), comp->name());
+        mSLog->flush();
+    }
+}
+
+template <typename VarType>
+void DAESolver<VarType>::initialize(Real t0) {
+    mSLog->info("---- Start dae initialization ----");
     int counter = 0;
     realtype *sval = NULL, *s_dtval = NULL;
     
@@ -96,37 +121,11 @@ void DAESolver::initialize(Real t0) {
         mSLog->info("Init voltage node {:s} = {}V", node->name(), sval[counter]);
         counter++;
     }
-    for (IdentifiedObject::Ptr comp : mComponents) {
-        // Initialize componentes and add componente eqs. to state vector
-        auto emtComp = std::dynamic_pointer_cast<SimPowerComp<Real> >(comp);
-        // auto emtComp = std::dynamic_pointer_cast<SimPowerComp<Complex> >(comp);
-        if (!emtComp) {
-            //TODO Error handle
-            std::cout << "-- ERROR -- " << std::endl;
-            throw CPS::Exception();
-        }
-        // Set initial values of all components
-        emtComp->initializeFromPowerflow(mSystem.mSystemFrequency);
-
-        auto daeComp = std::dynamic_pointer_cast<DAEInterface>(comp);
-        if (!daeComp) {
-            //TODO Error hadle
-            std::cout << "-- ERROR -- " << std::endl;
-            throw CPS::Exception();
-        }
+    for (auto daeComp : mDAEComponents) {
+        // Initialize component voltages of state vector
         daeComp->daeInitialize(sval, s_dtval, counter);
-        mSLog->flush();
-        // Register residual functions of components
-        mResidualFunctions.push_back(
-                [daeComp](double ttime, const double state[], const double dstate_dt[], double resid[],
-                            std::vector<int> &off) {
-                                daeComp->daeResidual(ttime, state, dstate_dt, resid, off);
-                            });
-        mComponents2.push_back(daeComp);
     }
 
-    // Create and initialize x' vector
-    s_dtval = N_VGetArrayPointer_Serial(dstate_dt);
     for (int i = 0; i < (mNEQ); i++) {
         // Set initial values for state derivative for now all equal to 0
         s_dtval[i] = 0; // TODO: add derivative calculation
@@ -179,17 +178,20 @@ void DAESolver::initialize(Real t0) {
     mSLog->flush();
 }
 
-int DAESolver::residualFunctionWrapper(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data)
+template <typename VarType>
+int DAESolver<VarType>::residualFunctionWrapper(realtype ttime, 
+    N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data)
 {
     DAESolver *self = reinterpret_cast<DAESolver *>(user_data);
-    // std::cout << "----------residualFuncttime-------------: " << ttime << std::endl;
     return self->residualFunction(ttime, state, dstate_dt, resid);
 }
 
-int DAESolver::residualFunction(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid)
+template <typename VarType>
+int DAESolver<VarType>::residualFunction(realtype ttime, 
+    N_Vector state, N_Vector dstate_dt, N_Vector resid)
 {
     mOffsets[0] = mNodes.size(); // Reset Offset of nodes
-    mOffsets[1] = 0; // Reset Offset of componentes
+    mOffsets[1] = 0;             // Reset Offset of componentes
 
     // Call all registered component residual functions
     for (auto resFn : mResidualFunctions) {
@@ -201,7 +203,8 @@ int DAESolver::residualFunction(realtype ttime, N_Vector state, N_Vector dstate_
     return 0;
 }
 
-Real DAESolver::step(Real time) {
+template <typename VarType>
+Real DAESolver<VarType>::step(Real time) {
     Real NextTime = time + mTimestep;
     mSLog->info("");
     mSLog->info("Current Time: {}", NextTime);
@@ -227,21 +230,23 @@ Real DAESolver::step(Real time) {
     }
 
     //update components
-    for (auto comp : mComponents2) {
+    for (auto comp : mDAEComponents) { 
         comp->daePostStep(sval, counter, NextTime);
     }
 
     return NextTime;
 }
 
-Task::List DAESolver::getTasks() {
+template <typename VarType>
+Task::List DAESolver<VarType>::getTasks() {
     Task::List l;
-    l.push_back(std::make_shared<DAESolver::SolveStep>(*this));
-    l.push_back(std::make_shared<DAESolver::LogTask>(*this));
+    l.push_back(std::make_shared<DAESolver<VarType>::SolveStep>(*this));
+    l.push_back(std::make_shared<DAESolver<VarType>::LogTask>(*this));
     return l;
 }
 
-DAESolver::~DAESolver() {
+template <typename VarType>
+DAESolver<VarType>::~DAESolver() {
     // Releasing all memory allocated by IDA
     IDAFree(&mem);
     N_VDestroy(state);
@@ -250,7 +255,8 @@ DAESolver::~DAESolver() {
     SUNMatDestroy(A);
 }
 
-void DAESolver::log(Real time) {
+template <typename VarType>
+void DAESolver<VarType>::log(Real time) {
     if (mLogLevel == Logger::Level::off)
 		return;
     else 
@@ -278,3 +284,6 @@ static int check_retval(void *returnvalue, const char *funcname, int opt) {
 
     return (0);
 }
+
+template class DPsim::DAESolver<Real>;
+template class DPsim::DAESolver<Complex>;

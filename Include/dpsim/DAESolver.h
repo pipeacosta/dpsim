@@ -30,6 +30,7 @@
 namespace DPsim {
 
 	/// Solver class which uses Differential Algebraic Equation(DAE) systems
+	template <typename VarType>
 	class DAESolver : public Solver {
 	protected:
 		// General simulation parameters
@@ -41,12 +42,10 @@ namespace DPsim {
 		/// Number of equations in problem
 		Int mNEQ;
 		/// Components of the Problem
-        CPS::IdentifiedObject::List mComponents;
-		CPS::DAEInterface::List mComponents2;		//change name
+		CPS::DAEInterface::List mDAEComponents;
 
 		/// Nodes of the Problem
-        CPS::SimNode<Real>::List mNodes;
-		// CPS::SimNode<Complex>::List mNodes;
+		typename CPS::SimNode<VarType>::List mNodes;
 
 		// IDA simulation variables
 		/// Memory block allocated by IDA
@@ -79,12 +78,13 @@ namespace DPsim {
 
 	public:
 		/// Create solve object with given parameters
-        DAESolver(String name, 
 			CPS::SystemTopology system, Real dt, Real t0, 
 			CPS::Logger::Level logLevel = CPS::Logger::Level::info);
 		/// Deallocate all memory
 		~DAESolver();
-		/// Initialize Components & Nodes with inital values
+		/// Initialization of individual components
+		void initializeComponents();
+		/// Initialization 
 		void initialize(Real t0);
 		/// Solve system for the current time
 		Real step(Real time);
@@ -96,9 +96,6 @@ namespace DPsim {
 			SolveStep(DAESolver& solver) :
 				Task(solver.mName + ".SolveStep"), mSolver(solver) {
 				mModifiedAttributes.push_back(Scheduler::external);
-				//for (auto node : solver.mNodes) {
-				//	mModifiedAttributes.push_back(node->attribute("v"));
-				//}
 			}
 			void execute(Real time, Int timeStepCount) {
     			mSolver.step(time);
@@ -112,7 +109,6 @@ namespace DPsim {
 		public:
 			LogTask(DAESolver& solver) :
 				Task(solver.mName + ".Log"), mSolver(solver) {
-				// mAttributeDependencies.push_back(solver.attribute("left_vector"));
 				mModifiedAttributes.push_back(Scheduler::external);
 			}
 

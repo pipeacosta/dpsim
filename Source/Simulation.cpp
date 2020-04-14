@@ -194,6 +194,8 @@ void Simulation::createMNASolver() {
 			solver = std::make_shared<MnaSolver<VarType>>(
 				mName + copySuffix, mDomain, mLogLevel);
 #endif /* WITH_CUDA */
+
+
 			solver->setTimeStep(mTimeStep);
 			solver->doSteadyStateInit(mSteadyStateInit);
 			solver->doFrequencyParallelization(mFreqParallel);
@@ -201,6 +203,16 @@ void Simulation::createMNASolver() {
 			solver->setSteadStIniAccLimit(mSteadStIniAccLimit);
 			solver->setSystem(subnets[net]);
 			solver->initialize();
+		}
+		break;
+#ifdef WITH_SUNDIALS
+			case Solver::Type::DAE:
+				solver = std::make_shared<DAESolver<VarType>>(mName + copySuffix, subnets[net], mTimeStep, 0.0);
+				break;
+#endif /* WITH_SUNDIALS */
+
+			default:
+				throw UnsupportedSolverException();
 		}
 		mSolvers.push_back(solver);
 	}
