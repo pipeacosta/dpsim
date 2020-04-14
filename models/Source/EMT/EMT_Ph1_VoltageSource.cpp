@@ -150,7 +150,7 @@ void EMT::Ph1::VoltageSource::daeResidual(double ttime, const double state[], co
 	off[1] += 1;
 }
 
-void EMT::Ph1::VoltageSource::daePostStep(const double state[], int& counter, double time) {
+void EMT::Ph1::VoltageSource::daePostStep(const double state[], const double dstate_dt[], int& counter, double time) {
 	this->daeUpdateVoltage(time);
 	mIntfCurrent(0,0) = state[counter];
 	counter++;

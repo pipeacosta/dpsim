@@ -10,6 +10,7 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
+#include <cps/Solver/DAEInterface.h>
 #include <cps/Base/Base_Ph1_Capacitor.h>
 
 namespace CPS {
@@ -24,6 +25,7 @@ namespace Ph1 {
 	///frequency and the current source changes for each iteration.
 	class Capacitor :
 		public Base::Ph1::Capacitor,
+		public DAEInterface,
 		public MNAInterface,
 		public SimPowerComp<Real>,
 		public SharedFactory<Capacitor> {
@@ -95,7 +97,7 @@ namespace Ph1 {
 		///Residual Function for DAE Solver
 		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///
-		void daePostStep(const double state[], int& counter, double time);
+		void daePostStep(const double state[], const double dstate_dt[], int& counter, double time);
 		///
 		int get_numberOfStateVariables() {return 1;}
 	};

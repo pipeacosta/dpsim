@@ -1,7 +1,7 @@
 /**
  *
- * @author Markus Mirz <mmirz@eonerc.rwth-aachen.de>
- * @copyright 2017-2018, Institute for Automation of Complex Power Systems, EONERC
+ * @author Martin Moraga <mmoraga@eonerc.rwth-aachen.de>
+ * @copyright 2017-2020, Institute for Automation of Complex Power Systems, EONERC
  *
  * DPsim
  *

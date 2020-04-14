@@ -224,7 +224,9 @@ Real DAESolver<VarType>::step(Real time) {
 
     //update node voltages
     realtype *sval = NULL;
+    realtype *dstate_val = NULL;
     sval  = N_VGetArrayPointer(state);
+    dstate_val  = N_VGetArrayPointer(dstate_dt);
     int counter=0;
     for (auto node : mNodes) {
         node->setVoltage(sval[counter]);
@@ -233,7 +235,7 @@ Real DAESolver<VarType>::step(Real time) {
 
     //update components
     for (auto comp : mDAEComponents) { 
-        comp->daePostStep(sval, counter, NextTime);
+        comp->daePostStep(sval, dstate_val, counter, NextTime);
     }
 
     return NextTime;

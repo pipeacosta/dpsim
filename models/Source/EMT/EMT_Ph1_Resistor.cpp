@@ -133,7 +133,7 @@ void EMT::Ph1::Resistor::daeResidual(double ttime, const double state[], const d
 	mSLog->info("");
 }
 
-void EMT::Ph1::Resistor::daePostStep(const double state[], int& counter, double time) {
+void EMT::Ph1::Resistor::daePostStep(const double state[], const double dstate_dt[],int& counter, double time) {
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	mIntfVoltage(0,0) = state[Pos1] - state[Pos2];
