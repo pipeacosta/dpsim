@@ -22,12 +22,12 @@ namespace CPS {
 		// #### DAE Section ####
 		
 		///
-		virtual void daeInitialize(double state[], double dstate_dt[], int& counter)=0;
+		virtual void daeInitialize(double time, double state[], double dstate_dt[], int& counter)=0;
 		// virtual Complex daeInitialize()=0;
 		///Residual Function for DAE Solver
-		virtual void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) = 0;
+		virtual void daeResidual(double sim_time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) = 0;
 		///
-		virtual void daePostStep(const double state[], const double dstate_dt[], int& counter, double time)=0;
+		virtual void daePostStep(const double state[], const double dstate_dt[], int& counter)=0;
 		///
 		virtual int get_numberOfStateVariables()=0;
 	};

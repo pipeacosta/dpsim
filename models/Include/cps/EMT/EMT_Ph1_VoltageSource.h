@@ -92,11 +92,11 @@ namespace Ph1 {
 		///
 		void daeUpdateVoltage(Real time);
 		///
-		void daeInitialize(double state[], double dstate_dt[], int& counter);
+		void daeInitialize(double time, double state[], double dstate_dt[], int& offset);
 		/// Residual function for DAE Solver
-		void daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///
-		void daePostStep(const double state[], const double dstate_dt[], int& counter, double time);
+		void daePostStep(const double state[], const double dstate_dt[], int& offset);
 		///
 		int get_numberOfStateVariables() {return 1;}
 	};

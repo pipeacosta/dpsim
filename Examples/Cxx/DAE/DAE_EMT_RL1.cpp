@@ -33,23 +33,22 @@ int main(int argc, char* argv[])
 	Logger::setLogDir("logs/"+simName);
 
 	// Nodes
-	std::vector<Complex> initialVoltage{ 10.0, 0, 0 };
+	std::vector<Complex> initialVoltage{ 0.0, 0, 0 };
 	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage);
 	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage);
-    //auto n3 = Node::make("n3");
 
 	// Components
 	auto vs = VoltageSource::make("vs", Logger::Level::info);
 	vs->setParameters(Complex(10, 0), 50);
-	auto r1 = Resistor::make("r_1");
+	auto r1 = Resistor::make("r_1", Logger::Level::info);
 	r1->setParameters(5);
-	auto l1 = Inductor::make("l_1");
-	l1->setParameters(0.02);
+	auto l1 = Inductor::make("l_1", Logger::Level::info);
+	l1->setParameters(0.005);
 
 	// Topology
 	vs->connect(SimNode::List{ SimNode::GND, n1 });
 	r1->connect(SimNode::List{ n1, n2 });
-	l1->connect(SimNode::List{ SimNode::GND, n2 });
+	l1->connect(SimNode::List{ n2, SimNode::GND});
 
 	// Define system topology
 	auto sys = SystemTopology(50, SystemNodeList{n1, n2}, SystemComponentList{vs, r1, l1});

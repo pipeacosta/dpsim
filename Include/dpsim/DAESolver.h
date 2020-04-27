@@ -37,6 +37,8 @@ namespace DPsim {
         CPS::SystemTopology mSystem;
 		/// Offsets vector for adding new equations to the residual vector
 		std::vector<Int> mOffsets;
+		/// Current simulation time
+		Real mSimTime;
 		/// Constant time step
 		Real mTimestep;
 		/// Number of equations in problem
@@ -68,13 +70,11 @@ namespace DPsim {
         long int resEval=0;
         std::vector<CPS::DAEInterface::ResFn> mResidualFunctions;
 
-		// #### Attributes related to logging ####
-		///residual vector logger
-		std::shared_ptr<DataLogger> mResidualLog;
-
 		/// Residual Function of entire System
 		static int residualFunctionWrapper(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data);
-		int residualFunction(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid);
+		//time = integration step size
+		//sim_time = current simulation time
+		int residualFunction(realtype time, N_Vector state, N_Vector dstate_dt, N_Vector resid);
 
 	public:
 		/// Create solve object with given parameters
@@ -124,9 +124,6 @@ namespace DPsim {
 		/// Solution vector of unknown quantities
 		Matrix mResidualVector;
 		Matrix& ResidualVector() { return mResidualVector; }	///Getter
-
-		/// Log residual vector values for each simulation step
-		void log(Real time);
 
 	};
 }

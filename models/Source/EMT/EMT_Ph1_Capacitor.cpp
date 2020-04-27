@@ -104,33 +104,30 @@ void EMT::Ph1::Capacitor::mnaUpdateCurrent(const Matrix& leftVector) {
 // #### DAE functions ####
 
 
-void EMT::Ph1::Capacitor::daeInitialize(double state[], double dstate_dt[], int &counter) {
-	// state[c_offset] = voltage through capacitor
-	// dstate_dt[c_offset] = voltage capacitor derivative
+void EMT::Ph1::Capacitor::daeInitialize(double time, double state[], double dstate_dt[], int &offset) {
+	// state[offset] = voltage through capacitor
+	// dstate_dt[offset] = voltage derivative though capacitor 
 
 	updateMatrixNodeIndices();
 	
-	int Pos1 = matrixNodeIndex(0);
-    int Pos2 = matrixNodeIndex(1);
-	mIntfVoltage(0,0) = 0.0;
-	if (terminalNotGrounded(0)) {
-		mIntfVoltage(0,0) -= state[Pos1];
-	}
-	if (terminalNotGrounded(1)) {
-		mIntfVoltage(0,0) += state[Pos2];
-	}
-	mIntfCurrent(0,0) = 0.0;				//TODO: verify correctness
-	dstate_dt[counter] = 0;					//TODO: verify correctness
-	state[counter] =  mIntfVoltage(0,0);
-	
-	mSLog->info("mIntfVoltage(0,0) = {}V", mIntfVoltage(0,0));
-	mSLog->info("Added voltage through capacitor '{:s}' to state vector, initial value = {}V", this->name(), state[counter]);
-	mSLog->info("Added derivative of capacitor voltage '{:s}' to derivative state vector, initial value = {}", this->name(), dstate_dt[counter]);
-	counter++;
+	state[offset] = -mIntfVoltage(0,0);
+	dstate_dt[offset] = -mIntfCurrent(0,0)/mCapacitance;		
+
+	mSLog->info(
+		"\n--- daeInitialize ---",
+		"\nAdded voltage through capacitor '{:s}' to state vector, initial value  = {:f}V", 
+		"\nAdded derivative of voltage through capacitor '{:s}' to derivative state vector, initial value= {:f}",
+		"\n--- daeInitialize finished ---",
+		this->name(),state[offset],
+		this->name(),dstate_dt[offset]
+	);
+
+	offset++;
 }
 
-void EMT::Ph1::Capacitor::daeResidual(double ttime, const double state[], 
-	const double dstate_dt[], double resid[], std::vector<int>& off) {
+void EMT::Ph1::Capacitor::daeResidual(double sim_time, 
+	const double state[], const double dstate_dt[], 
+	double resid[], std::vector<int>& off) {
 	// state[c_offset] = voltage through capacitor
 	// dstate_dt[c_offset] = voltage capacitor derivative
 	// state[Pos2] = voltage of node matrixNodeIndex(1)
@@ -143,27 +140,22 @@ void EMT::Ph1::Capacitor::daeResidual(double ttime, const double state[],
     int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component
 
-	resid[c_offset] = state[c_offset];
+	resid[c_offset] = -state[c_offset];
 	if (terminalNotGrounded(0)) {
-		resid[Pos1] -= mCapacitance*dstate_dt[c_offset];
+		resid[Pos1] += mCapacitance*dstate_dt[c_offset];
 		resid[c_offset] += state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		resid[Pos2] += mCapacitance*dstate_dt[c_offset];
+		resid[Pos2] -= mCapacitance*dstate_dt[c_offset];
 		resid[c_offset] -= state[Pos2];
 	}
 
-	mSLog->info("state[{}]={}, Pos2={}", Pos2, state[Pos2], Pos2);
-	mSLog->info("state[c_offset]={}", state[c_offset]);
-	mSLog->info("dstate[c_offset]={}", dstate_dt[c_offset]);
-	mSLog->info("resid[{}]={}", c_offset, resid[c_offset]);
-	mSLog->info("");
 	off[1] += 1;
-	}
+}
 
-void EMT::Ph1::Capacitor::daePostStep(const double state[], const double dstate_dt[], int& counter, double time) {
-	mIntfCurrent(0,0) = mCapacitance*dstate_dt[counter];
-	mIntfVoltage(0,0) = state[counter];
-	counter++;
+void EMT::Ph1::Capacitor::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+	mIntfCurrent(0,0) = mCapacitance*dstate_dt[offset];
+	mIntfVoltage(0,0) = state[offset];
+	offset++;
 }
 

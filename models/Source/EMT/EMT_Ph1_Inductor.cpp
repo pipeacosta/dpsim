@@ -127,33 +127,30 @@ void EMT::Ph1::Inductor::mnaUpdateCurrent(const Matrix& leftVector) {
 
 // #### DAE functions ####
 
-
-void EMT::Ph1::Inductor::daeInitialize(double state[], double dstate_dt[], int &counter) {
-	// state[c_offset] = current through inductor
-	// dstate_dt[c_offset] = inductor current derivative
+void EMT::Ph1::Inductor::daeInitialize(double time, double state[], double dstate_dt[], int &offset) {
+	// state[offset] = current through inductor
+	// dstate_dt[offset] = inductor current derivative
 
 	updateMatrixNodeIndices();
-	
-	int Pos1 = matrixNodeIndex(0);
-    int Pos2 = matrixNodeIndex(1);
-	mIntfVoltage(0,0) = 0.0;
-	if (terminalNotGrounded(0)) {
-		mIntfVoltage(0,0) -= state[Pos1];
-	}
-	if (terminalNotGrounded(1)) {
-		mIntfVoltage(0,0) += state[Pos2];
-	}
-	mIntfCurrent(0,0) = 0.0;											//TODO
 
-	state[counter] = mIntfCurrent(0,0);	
-	dstate_dt[counter] = mIntfVoltage(0,0)/mInductance;					//correct?
-	mSLog->info("mIntfVoltage(0,0) = {}V", mIntfVoltage(0,0));
-	mSLog->info("Added current through inductor '{:s}' to state vector, initial value = {}A", this->name(), state[counter]);
-	mSLog->info("Added derivative of current inductor '{:s}' to derivative state vector, initial value = {}A", this->name(), dstate_dt[counter]);
-	counter++;
+	state[offset] = mIntfCurrent(0,0);	
+	dstate_dt[offset] = mIntfVoltage(0,0)/mInductance;					
+
+	mSLog->info(
+		"\n--- daeInitialize ---"
+		"\nAdded current through inductor '{}' to state vector, initial value = {:d}A"
+		"\nAdded derivative of current inductor '{}' to derivative state vector, initial value = {:d}",
+		"\n--- daeInitialize finished ---",
+		this->name(), state[offset], 
+		this->name(), dstate_dt[offset]
+	);
+
+	offset++;
 }
 
-void EMT::Ph1::Inductor::daeResidual(double ttime, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) {
+void EMT::Ph1::Inductor::daeResidual(double sim_time, 
+	const double state[], const double dstate_dt[], 
+	double resid[], std::vector<int>& off) {
 	// state[c_offset] = current through inductor, flowing into node matrixNodeIndex(0)
 	// dstate_dt[c_offset] = inductor current derivative
 	// state[Pos2] = voltage of node matrixNodeIndex(1)
@@ -168,32 +165,27 @@ void EMT::Ph1::Inductor::daeResidual(double ttime, const double state[], const d
 
 	resid[c_offset] = -mInductance*dstate_dt[c_offset];
 	if (terminalNotGrounded(0)) {
-		resid[c_offset] -= state[Pos1];
-		resid[Pos1] -= state[c_offset];
+		resid[c_offset] += state[Pos1];
+		resid[Pos1] += state[c_offset];
 	}
 	if (terminalNotGrounded(1)) {
-		resid[c_offset] += state[Pos2];
-		resid[Pos2] += state[c_offset];
+		resid[c_offset] -= state[Pos2];
+		resid[Pos2] -= state[c_offset];
 	}
 
-	mSLog->info("state[{}]={}, Pos2={}", Pos2, state[Pos2], Pos2);
-	mSLog->info("state[c_offset]={}", state[c_offset]);
-	mSLog->info("dstate[c_offset]={}", dstate_dt[c_offset]);
-	mSLog->info("resid[{}]={}", c_offset, resid[c_offset]);
-	mSLog->info("");
 	off[1] += 1;
 }
 
-void EMT::Ph1::Inductor::daePostStep(const double state[], const double dstate_dt[], int& counter, double time) {
+void EMT::Ph1::Inductor::daePostStep(const double state[], const double dstate_dt[], int& offset) {
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	mIntfVoltage(0,0) = 0.0;
 	if (terminalNotGrounded(0)) {
-		mIntfVoltage(0,0) -= state[Pos1];
+		mIntfVoltage(0,0) += state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		mIntfVoltage(0,0) += state[Pos2];
+		mIntfVoltage(0,0) -= state[Pos2];
 	}
-	mIntfCurrent(0,0) = state[counter];
-	counter++;
+	mIntfCurrent(0,0) = state[offset];
+	offset++;
 }

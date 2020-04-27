@@ -81,6 +81,7 @@ if(WITH_SUNDIALS)
 		DAE/DAE_DP_test.cpp
 		DAE/DAE_EMT_RL1.cpp
 		DAE/DAE_EMT_RC1.cpp
+		DAE/DAE_EMT_RLC1.cpp
 	)
 endif()
 

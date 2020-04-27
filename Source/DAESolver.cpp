@@ -20,13 +20,9 @@ DAESolver<VarType>::DAESolver(String name,
 	Solver(name, logLevel), mSystem(system),
 	mTimestep(dt) {
 
-    // Raw residual function
-	mResidualLog = std::make_shared<DataLogger>(name + "_ResidualLog", logLevel != CPS::Logger::Level::off);
-    
     // Defines offset vector of the residual which is composed as follows:
     // mOffset[0] = # nodal voltage equations
     // mOffset[1] = # of components equations (1 for inductor)
-
     mOffsets.push_back(0);
     mOffsets.push_back(0);
 
@@ -85,9 +81,9 @@ void DAESolver<VarType>::initializeComponents() {
 
         // Register residual functions of components
         mResidualFunctions.push_back(
-                [daeComp](double ttime, const double state[], const double dstate_dt[], double resid[],
-                            std::vector<int> &off) {
-                                daeComp->daeResidual(ttime, state, dstate_dt, resid, off);
+                [daeComp](double sim_time, const double state[], const double dstate_dt[], 
+                            double resid[], std::vector<int> &off) {
+                                daeComp->daeResidual(sim_time, state, dstate_dt, resid, off);
                             });
         
         mNEQ += daeComp->get_numberOfStateVariables();
@@ -100,7 +96,8 @@ template <typename VarType>
 void DAESolver<VarType>::initialize(Real t0) {
     mSLog->info("---- Start dae initialization ----");
     mSLog->info("Number of Eqn.: {}", mNEQ);
-
+    
+    mSimTime = t0;
     int counter = 0;
     realtype *sval = NULL, *s_dtval = NULL;
     
@@ -125,7 +122,7 @@ void DAESolver<VarType>::initialize(Real t0) {
     }
     for (auto daeComp : mDAEComponents) {
         // Initialize component voltages of state vector
-        daeComp->daeInitialize(sval, s_dtval, counter);
+        daeComp->daeInitialize(t0, sval, s_dtval, counter);
     }
 
     for (int i = 0; i < (mNEQ); i++) {
@@ -149,9 +146,9 @@ void DAESolver<VarType>::initialize(Real t0) {
     mSLog->info("Define Userdata");
     // This passes the solver instance as the user_data argument to the residual functions
     int ret = IDASetUserData(mem, this);
-//	if (check_flag(&ret, "IDASetUserData", 1)) {
-//		throw CPS::Exception();
-//	}
+	if (check_retval(&ret, "IDASetUserData", 1)) {
+		throw CPS::Exception();
+	}
 
     mSLog->info("Call IDAInit");
     ret = IDAInit(mem, &DAESolver::residualFunctionWrapper, t0, state, dstate_dt);
@@ -165,6 +162,14 @@ void DAESolver<VarType>::initialize(Real t0) {
     	throw CPS::Exception();
 	}
 
+    /*
+    mSLog->info("Call IDASetStopTime");
+    ret = IDASetStopTime(mem, mTimestep);
+    if (check_retval(&ret, "IDASetStopTime", 1)) {
+    	throw CPS::Exception();
+	}
+    */
+
     mSLog->info("Call IDA Solver Stuff");
     // Allocate and connect Matrix A and solver LS to IDA
     A = SUNDenseMatrix(mNEQ, mNEQ);
@@ -174,30 +179,36 @@ void DAESolver<VarType>::initialize(Real t0) {
     //Optional IDA input functions
     //ret = IDASetMaxNumSteps(mem, -1);  //Max. number of timesteps until tout (-1 = unlimited)
     //ret = IDASetMaxConvFails(mem, 100); //Max. number of convergence failures at one step
-    (void) ret;
 
     mSLog->info("--- Finished initialization --- \n");
     mSLog->flush();
 }
 
 template <typename VarType>
-int DAESolver<VarType>::residualFunctionWrapper(realtype ttime, 
+int DAESolver<VarType>::residualFunctionWrapper(realtype time, 
     N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data)
 {
     DAESolver *self = reinterpret_cast<DAESolver *>(user_data);
-    return self->residualFunction(ttime, state, dstate_dt, resid);
+    return self->residualFunction(time, state, dstate_dt, resid);
 }
 
 template <typename VarType>
-int DAESolver<VarType>::residualFunction(realtype ttime, 
+int DAESolver<VarType>::residualFunction(realtype time, 
     N_Vector state, N_Vector dstate_dt, N_Vector resid)
 {
     mOffsets[0] = mNodes.size(); // Reset Offset of nodes
     mOffsets[1] = 0;             // Reset Offset of componentes
 
+    //reset residual functions of nodes
+    realtype *residual = NULL;
+    residual  = N_VGetArrayPointer(resid);
+    for (int i=0; i<mOffsets[0]; i++) {
+        residual[i] = 0;
+    }
+
     // Call all registered component residual functions
     for (auto resFn : mResidualFunctions) {
-        resFn(ttime, NV_DATA_S(state), NV_DATA_S(dstate_dt), NV_DATA_S(resid), mOffsets);
+        resFn(mSimTime, NV_DATA_S(state), NV_DATA_S(dstate_dt), NV_DATA_S(resid), mOffsets);
     }
 
     // If successful; positive value if recoverable error, negative if fatal error
@@ -207,12 +218,9 @@ int DAESolver<VarType>::residualFunction(realtype ttime,
 
 template <typename VarType>
 Real DAESolver<VarType>::step(Real time) {
-    Real NextTime = time + mTimestep;
-    mSLog->info("");
-    mSLog->info("Current Time: {}", NextTime);
-    
-    int ret = IDASolve(mem, NextTime, &tret, state, dstate_dt, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
+    realtype NextTime = (realtype) time+mTimestep;
 
+    int ret = IDASolve(mem, NextTime, &tret, state, dstate_dt, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
     if (ret != IDA_SUCCESS) {
         mSLog->info("Ida Error: {}", ret);
         void(IDAGetNumSteps(mem, &interalSteps));
@@ -227,18 +235,20 @@ Real DAESolver<VarType>::step(Real time) {
     realtype *dstate_val = NULL;
     sval  = N_VGetArrayPointer(state);
     dstate_val  = N_VGetArrayPointer(dstate_dt);
-    int counter=0;
+    mOffsets[0] = 0;             // Reset Offset of nodes
     for (auto node : mNodes) {
-        node->setVoltage(sval[counter]);
-        counter++;
+        node->setVoltage(sval[mOffsets[0]]);
+        mOffsets[0] += 1;
     }
 
     //update components
+    mOffsets[1] = mOffsets[0];      // Reset Offset of componentes
     for (auto comp : mDAEComponents) { 
-        comp->daePostStep(sval, dstate_val, counter, NextTime);
+        comp->daePostStep(sval, dstate_val, mOffsets[1]);
     }
 
-    return NextTime;
+    mSimTime = time+mTimestep;
+    return mSimTime;
 }
 
 template <typename VarType>
@@ -257,14 +267,6 @@ DAESolver<VarType>::~DAESolver() {
     N_VDestroy(dstate_dt);
     SUNLinSolFree(LS);
     SUNMatDestroy(A);
-}
-
-template <typename VarType>
-void DAESolver<VarType>::log(Real time) {
-    if (mLogLevel == Logger::Level::off)
-		return;
-    else 
-        mResidualLog->logEMTNodeValues(time, ResidualVector());
 }
 
 static int check_retval(void *returnvalue, const char *funcname, int opt) {
