@@ -22,7 +22,7 @@ DAESolver<VarType>::DAESolver(String name,
 
     // Defines offset vector of the residual which is composed as follows:
     // mOffset[0] = # nodal voltage equations
-    // mOffset[1] = # of components equations (1 for inductor)
+    // mOffset[1] = # of components equations (1 for inductor, cap and voltagesource)
     mOffsets.push_back(0);
     mOffsets.push_back(0);
 

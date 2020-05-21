@@ -107,11 +107,9 @@ void EMT::Ph1::Capacitor::mnaUpdateCurrent(const Matrix& leftVector) {
 void EMT::Ph1::Capacitor::daeInitialize(double time, double state[], double dstate_dt[], int &offset) {
 	// state[offset] = voltage through capacitor
 	// dstate_dt[offset] = voltage derivative though capacitor 
-
 	updateMatrixNodeIndices();
-	
-	state[offset] = -mIntfVoltage(0,0);
-	dstate_dt[offset] = -mIntfCurrent(0,0)/mCapacitance;		
+	state[offset] = mIntfVoltage(0,0);
+	dstate_dt[offset] = mIntfCurrent(0,0)/mCapacitance;		
 
 	mSLog->info(
 		"\n--- daeInitialize ---",
@@ -132,9 +130,9 @@ void EMT::Ph1::Capacitor::daeResidual(double sim_time,
 	// dstate_dt[c_offset] = voltage capacitor derivative
 	// state[Pos2] = voltage of node matrixNodeIndex(1)
 	// state[Pos1] = voltage of node matrixNodeIndex(0)
-	// resid[c_offset] = voltage eq of capacitor: state[offset] - (state[pos2] - state[pos1]) = 0
-	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0) ---> substract mCapacitance*dstate_dt[c_offset]
-	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1) ---> add mCapacitance*dstate_dt[c_offset]
+	// resid[c_offset] = voltage eq of capacitor: state[pos2]-state[pos1]-state[offset]=0
+	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0) ---> substract current through cap
+	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1) ---> add current through cap
 
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
@@ -142,12 +140,12 @@ void EMT::Ph1::Capacitor::daeResidual(double sim_time,
 
 	resid[c_offset] = -state[c_offset];
 	if (terminalNotGrounded(0)) {
-		resid[Pos1] += mCapacitance*dstate_dt[c_offset];
-		resid[c_offset] += state[Pos1];
+		resid[Pos1] -= mCapacitance*dstate_dt[c_offset];
+		resid[c_offset] -= state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		resid[Pos2] -= mCapacitance*dstate_dt[c_offset];
-		resid[c_offset] -= state[Pos2];
+		resid[Pos2] += mCapacitance*dstate_dt[c_offset];
+		resid[c_offset] += state[Pos2];
 	}
 
 	off[1] += 1;

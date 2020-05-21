@@ -33,37 +33,42 @@ int main(int argc, char* argv[])
 	Logger::setLogDir("logs/"+simName);
 
 	// Nodes
-	std::vector<Complex> initialVoltage{ 0.0, 0, 0 };
-	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage);
-	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage);
-    auto n3 = SimNode::make("n3", PhaseType::Single, initialVoltage);
+	std::vector<Complex> initialVoltage_n1{ Complex(10,0), 0, 0 };
+    std::vector<Complex> initialVoltage_n2{ Complex( 0.0007, -0.083), 0, 0 };
+    std::vector<Complex> initialVoltage_n3{ Complex( 0.0528, -6.366), 0, 0 };
+	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage_n1);
+	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage_n2);
+    auto n3 = SimNode::make("n3", PhaseType::Single, initialVoltage_n3);
 
 	// Components
 	auto vs = VoltageSource::make("vs", Logger::Level::info);
 	vs->setParameters(Complex(10, 0), 50);
-	auto r1 = Resistor::make("r_1", Logger::Level::info);
+	auto r1 = Resistor::make("r1", Logger::Level::info);
 	r1->setParameters(10);
-	auto l1 = Inductor::make("l_1", Logger::Level::info);
+	auto l1 = Inductor::make("l1", Logger::Level::info);
 	l1->setParameters(0.02);
-    auto c1 = Capacitor::make("c_1", Logger::Level::info);
+    auto c1 = Capacitor::make("c1", Logger::Level::info);
 	c1->setParameters(0.0005);
 
 	// Topology
 	vs->connect(SimNode::List{ SimNode::GND, n1 });
-	r1->connect(SimNode::List{ n1, n2 });
-	l1->connect(SimNode::List{ n2, n3});
-    c1->connect(SimNode::List{ n3, SimNode::GND});
+	r1->connect(SimNode::List{ n2, n1 });
+	l1->connect(SimNode::List{ n3, n2 });
+    c1->connect(SimNode::List{ SimNode::GND, n3});
 
 	// Define system topology
 	auto sys = SystemTopology(50, SystemNodeList{n1, n2, n3}, SystemComponentList{vs, r1, l1, c1});
+	vs->setInitialCurrent(0.99993);
 
 	// Logger
 	auto logger = DataLogger::make(simName);
-	logger->addAttribute("i_c1", c1->attribute("i_intf"));
+    logger->addAttribute("vs", vs->attribute("v_intf"));
+	logger->addAttribute("i_c", c1->attribute("i_intf"));
 	logger->addAttribute("v_l", l1->attribute("v_intf"));
 	logger->addAttribute("v_c", c1->attribute("v_intf"));
     logger->addAttribute("v_r", r1->attribute("v_intf"));
 
+	vs->setInitialCurrent(Complex(0.99993,0.0083));
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);

@@ -31,7 +31,7 @@ void EMT::Ph1::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 	Real omega = 2 * PI * frequency;
 	Complex impedance = { 0, omega * mInductance };
 	mIntfVoltage(0,0) = (initialSingleVoltage(1) - initialSingleVoltage(0)).real();
-	mIntfCurrent(0,0) = (mIntfVoltage(0,0) / impedance).real();
+	mIntfCurrent(0,0) = ((initialSingleVoltage(1)- initialSingleVoltage(0))/ impedance).real();
 
 	mSLog->info(
 		"\n--- Initialization from powerflow ---"
@@ -130,9 +130,7 @@ void EMT::Ph1::Inductor::mnaUpdateCurrent(const Matrix& leftVector) {
 void EMT::Ph1::Inductor::daeInitialize(double time, double state[], double dstate_dt[], int &offset) {
 	// state[offset] = current through inductor
 	// dstate_dt[offset] = inductor current derivative
-
 	updateMatrixNodeIndices();
-
 	state[offset] = mIntfCurrent(0,0);	
 	dstate_dt[offset] = mIntfVoltage(0,0)/mInductance;					
 
@@ -165,12 +163,12 @@ void EMT::Ph1::Inductor::daeResidual(double sim_time,
 
 	resid[c_offset] = -mInductance*dstate_dt[c_offset];
 	if (terminalNotGrounded(0)) {
-		resid[c_offset] += state[Pos1];
-		resid[Pos1] += state[c_offset];
+		resid[c_offset] -= state[Pos1];
+		resid[Pos1] -= state[c_offset];
 	}
 	if (terminalNotGrounded(1)) {
-		resid[c_offset] -= state[Pos2];
-		resid[Pos2] -= state[c_offset];
+		resid[c_offset] += state[Pos2];
+		resid[Pos2] += state[c_offset];
 	}
 
 	off[1] += 1;
@@ -181,10 +179,10 @@ void EMT::Ph1::Inductor::daePostStep(const double state[], const double dstate_d
     int Pos2 = matrixNodeIndex(1);
 	mIntfVoltage(0,0) = 0.0;
 	if (terminalNotGrounded(0)) {
-		mIntfVoltage(0,0) += state[Pos1];
+		mIntfVoltage(0,0) -= state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		mIntfVoltage(0,0) -= state[Pos2];
+		mIntfVoltage(0,0) += state[Pos2];
 	}
 	mIntfCurrent(0,0) = state[offset];
 	offset++;

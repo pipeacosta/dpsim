@@ -111,7 +111,7 @@ void EMT::Ph1::VoltageSource::daeInitialize(double time, double state[], double 
 	// dstate_dt[offset] = derivative of current through voltage source  (not used yed)
 
 	updateMatrixNodeIndices();
-	state[offset] = 0.0;
+	state[offset] = mIntfCurrent(0,0);
 	dstate_dt[offset] = 0.0;
 	mSLog->info(
 		"\n--- daeInitialize ---"
@@ -138,14 +138,9 @@ void EMT::Ph1::VoltageSource::daeResidual(double sim_time,
     int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component
 
-	if (sim_time == 0.0) {
-		resid[c_offset] = 0.0;
-	}
-	else {
-		resid[c_offset] = -mIntfVoltage(0,0);
-	}
+	resid[c_offset] = -mIntfVoltage(0,0);
 	if (terminalNotGrounded(0)) {
-		resid[c_offset] -= state[Pos1];
+		resid[c_offset] -= state[Pos1];	
 		resid[Pos1] += state[c_offset];
 	}
 	if (terminalNotGrounded(1)) {

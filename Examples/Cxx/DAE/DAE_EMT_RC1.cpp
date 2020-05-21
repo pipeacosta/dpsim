@@ -33,9 +33,10 @@ int main(int argc, char* argv[])
 	Logger::setLogDir("logs/"+simName);
 
 	// Nodes
-	std::vector<Complex> initialVoltage{ 0.0, 0, 0 };
-	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage);
-	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage);
+	std::vector<Complex> initialVoltage_n1{ Complex(10,0), 0, 0 };
+    std::vector<Complex> initialVoltage_n2{ Complex(0.92, -2.89), 0, 0 };
+	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage_n1);
+	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage_n2);
 
 	// Components
 	auto vs = VoltageSource::make("vs", Logger::Level::info);
@@ -47,8 +48,8 @@ int main(int argc, char* argv[])
 
 	// Topology
 	vs->connect(SimNode::List{ SimNode::GND, n1 });
-	r1->connect(SimNode::List{ n1, n2 });
-	c1->connect(SimNode::List{ n2, SimNode::GND });
+	r1->connect(SimNode::List{ n2, n1 });
+	c1->connect(SimNode::List{ SimNode::GND, n2 });
 
 	// Define system topology
 	auto sys = SystemTopology(50, SystemNodeList{n1, n2}, SystemComponentList{vs, r1, c1});
@@ -64,6 +65,7 @@ int main(int argc, char* argv[])
 	logger->addAttribute("v1", n1->attribute("v"));
 	logger->addAttribute("v2", n2->attribute("v"));
 
+	vs->setInitialCurrent(Complex(1.816,0.5782));
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);

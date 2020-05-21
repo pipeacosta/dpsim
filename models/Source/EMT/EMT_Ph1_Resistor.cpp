@@ -101,7 +101,6 @@ void EMT::Ph1::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
 
 void EMT::Ph1::Resistor::daeInitialize(double time, double state[], double dstate_dt[], int& offset) {
 	updateMatrixNodeIndices();
-
 	mSLog->info(
 		"\n--- daeInitialize ---");
 }
@@ -111,25 +110,24 @@ void EMT::Ph1::Resistor::daeResidual(double sim_time,
 	double resid[], std::vector<int>& off) {
 	// state[Pos2] = voltage of node matrixNodeIndex(1)
 	// state[Pos1] = voltage of node matrixNodeIndex(0)
-	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0) --> add resistor current
-	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1) --> substract resistor current
+	// resid[Pos1] = nodal current equation of node matrixNodeIndex(1) --> add resistor current
+	// resid[Pos2] = nodal current equation of node matrixNodeIndex(0) --> substract resistor current
 
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 
 	double voltageResistor = 0.0;
 	if (terminalNotGrounded(0)) {
-		voltageResistor += state[Pos1];
+		voltageResistor -= state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		voltageResistor -= state[Pos2];
+		voltageResistor +=state[Pos2];
 	}
-	double currentResistor = voltageResistor/mResistance;
 	if (terminalNotGrounded(0)) {
-		resid[Pos1] += currentResistor;
+		resid[Pos1] -= voltageResistor/mResistance;
 	}
 	if (terminalNotGrounded(1)) {
-		resid[Pos2] -= currentResistor;
+		resid[Pos2] += voltageResistor/mResistance;
 	}
 }
 
@@ -138,10 +136,10 @@ void EMT::Ph1::Resistor::daePostStep(const double state[], const double dstate_d
     int Pos2 = matrixNodeIndex(1);
 	mIntfVoltage(0,0) = 0.0;
 	if (terminalNotGrounded(0)) {
-		mIntfVoltage(0,0) += state[Pos1];
+		mIntfVoltage(0,0) -= state[Pos1];
 	}
 	if (terminalNotGrounded(1)) {
-		mIntfVoltage(0,0) -= state[Pos2];
+		mIntfVoltage(0,0) += state[Pos2];
 	}
 	mIntfCurrent(0,0) = mIntfVoltage(0,0) / mResistance;
 }
