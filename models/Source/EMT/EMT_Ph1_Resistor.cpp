@@ -102,7 +102,10 @@ void EMT::Ph1::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
 void EMT::Ph1::Resistor::daeInitialize(double time, double state[], double dstate_dt[], int& offset) {
 	updateMatrixNodeIndices();
 	mSLog->info(
-		"\n--- daeInitialize ---");
+		"\n--- daeInitialize ---"
+		"\nno variable was added by the resistor '{:s}' to the state vector"
+		"\n--- daeInitialize finished ---",
+		this->name());
 }
 
 void EMT::Ph1::Resistor::daeResidual(double sim_time,

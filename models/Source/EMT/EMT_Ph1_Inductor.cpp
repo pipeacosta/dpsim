@@ -133,11 +133,10 @@ void EMT::Ph1::Inductor::daeInitialize(double time, double state[], double dstat
 	updateMatrixNodeIndices();
 	state[offset] = mIntfCurrent(0,0);	
 	dstate_dt[offset] = mIntfVoltage(0,0)/mInductance;					
-
 	mSLog->info(
 		"\n--- daeInitialize ---"
-		"\nAdded current through inductor '{}' to state vector, initial value = {:d}A"
-		"\nAdded derivative of current inductor '{}' to derivative state vector, initial value = {:d}",
+		"\nAdded current through inductor '{:s}' to state vector, initial value = {:f}A"
+		"\nAdded derivative of current inductor '{:s}' to derivative state vector, initial value = {:f}"
 		"\n--- daeInitialize finished ---",
 		this->name(), state[offset], 
 		this->name(), dstate_dt[offset]

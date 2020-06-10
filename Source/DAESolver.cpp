@@ -117,7 +117,12 @@ void DAESolver<VarType>::initialize(Real t0) {
         Real tempVolt = std::real(node->initialSingleVoltage(node->phaseType()));
         sval[counter] = tempVolt;
         s_dtval[counter] = 0;
-        mSLog->info("Init voltage node {:s} = {}V", node->name(), sval[counter]);
+        mSLog->info(
+		    "Added node '{:s}' to state vector, init voltage = {:f}V",
+            node->name(), sval[counter]);
+		mSLog->info(
+            "Added derivative of the voltage node of '{:s}' to derivative state vector, initial value = {:f}V",
+		    node->name(), s_dtval[counter]);
         counter++;
     }
     for (auto daeComp : mDAEComponents) {
@@ -128,7 +133,7 @@ void DAESolver<VarType>::initialize(Real t0) {
     for (int i = 0; i < (mNEQ); i++) {
         // Set initial values for state derivative for now all equal to 0
         s_dtval[i] = 0; // TODO: add derivative calculation
-        mSLog->info("derivative {}: {}", i, s_dtval[i]);
+        // mSLog->info("derivative {}: {}", i, s_dtval[i]);
     }
 
     // Set relative tolerance and absolute error

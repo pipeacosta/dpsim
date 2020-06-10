@@ -115,11 +115,11 @@ void EMT::Ph1::VoltageSource::daeInitialize(double time, double state[], double 
 	dstate_dt[offset] = 0.0;
 	mSLog->info(
 		"\n--- daeInitialize ---"
-		"\nAdded current through VoltageSource '{:s}' to state vector, initial value  = {:f}A", 
-		"\nAdded derivative of current through VoltageSource '{:s}' to derivative state vector, initial value= {:f}",
+		"\nAdded current through VoltageSource '{:s}' to state vector, initial value  = {:f}A"
+		"\nAdded derivative of current through VoltageSource '{:s}' to derivative state vector, initial value= {:f}"
 		"\n--- daeInitialize finished ---",
-		this->name(),state[offset],
-		this->name(),dstate_dt[offset]
+		this->name(), state[offset],
+		this->name(), dstate_dt[offset]
 	);
 	offset++;
 }

@@ -112,9 +112,9 @@ void EMT::Ph1::Capacitor::daeInitialize(double time, double state[], double dsta
 	dstate_dt[offset] = mIntfCurrent(0,0)/mCapacitance;		
 
 	mSLog->info(
-		"\n--- daeInitialize ---",
-		"\nAdded voltage through capacitor '{:s}' to state vector, initial value  = {:f}V", 
-		"\nAdded derivative of voltage through capacitor '{:s}' to derivative state vector, initial value= {:f}",
+		"\n--- daeInitialize ---"
+		"\nAdded voltage through capacitor '{:s}' to state vector, initial value  = {:f}V"
+		"\nAdded derivative of voltage through capacitor '{:s}' to derivative state vector, initial value= {:f}"
 		"\n--- daeInitialize finished ---",
 		this->name(),state[offset],
 		this->name(),dstate_dt[offset]
