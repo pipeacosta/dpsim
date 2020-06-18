@@ -99,7 +99,7 @@ namespace Ph1 {
 		///
 		void daePostStep(const double state[], const double dstate_dt[], int& counter);
 		///
-		int get_numberOfStateVariables() {return 1;}
+		int getNumberOfStateVariables() {return 1;}
 	};
 }
 }

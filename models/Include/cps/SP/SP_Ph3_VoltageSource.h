@@ -102,7 +102,7 @@ namespace CPS {
 				//TODO
 				void daePostStep(const double state[], const double dstate_dt[], int& counter){};
 				//TODO
-				int get_numberOfStateVariables() {return 0;}
+				int getNumberOfStateVariables() {return 0;}
 			};
 		}
 	}

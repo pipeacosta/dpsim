@@ -29,6 +29,6 @@ namespace CPS {
 		///
 		virtual void daePostStep(const double state[], const double dstate_dt[], int& counter)=0;
 		///
-		virtual int get_numberOfStateVariables()=0;
+		virtual int getNumberOfStateVariables()=0;
 	};
 }

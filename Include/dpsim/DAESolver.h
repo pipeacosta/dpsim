@@ -51,30 +51,30 @@ namespace DPsim {
 
 		// IDA simulation variables
 		/// Memory block allocated by IDA
-		void *mem = NULL;
+		void *mIDAMemoryBlock = NULL;
 		/// Vector of problem variables
-		N_Vector state = NULL;
+		N_Vector mStateVector = NULL;
 		/// Derivates of the state vector with respect to time
-		N_Vector dstate_dt = NULL;
+		N_Vector mDerivativeStateVector = NULL;
 		/// Time IDA reached while solving
-		realtype tret;
+		realtype mTimeReachedSolver;
 		/// Scalar absolute tolerance
-		realtype abstol;
+		realtype mAbsoluteTolerance;
 		/// Relative tolerance
-		realtype rtol;
+		realtype mRelativeTolerance;
 		/// Template Jacobian Matrix
-		SUNMatrix A = NULL;
+		SUNMatrix mJacobianMatrix = NULL;
 		/// Linear solver object
-		SUNLinearSolver LS = NULL;
-        long int interalSteps = 0;
-        long int resEval=0;
+		SUNLinearSolver mLinearSolver = NULL;
+        /// number of steps taken by ida
+		long int mNumberStepsIDA = 0;
+		/// number of calls to the user's res function
+        long int mNumberCallsResidualFunctins=0;
         std::vector<CPS::DAEInterface::ResFn> mResidualFunctions;
 
 		/// Residual Function of entire System
-		static int residualFunctionWrapper(realtype ttime, N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data);
-		//time = integration step size
-		//sim_time = current simulation time
-		int residualFunction(realtype time, N_Vector state, N_Vector dstate_dt, N_Vector resid);
+		static int residualFunctionWrapper(realtype step_time, N_Vector state, N_Vector dstate_dt, N_Vector resid, void *user_data);
+		int residualFunction(realtype step_time, N_Vector state, N_Vector dstate_dt, N_Vector resid);
 
 	public:
 		/// Create solve object with given parameters
@@ -120,10 +120,5 @@ namespace DPsim {
 		private:
 			DAESolver& mSolver;
 		};
-
-		/// Solution vector of unknown quantities
-		Matrix mResidualVector;
-		Matrix& ResidualVector() { return mResidualVector; }	///Getter
-
 	};
 }
