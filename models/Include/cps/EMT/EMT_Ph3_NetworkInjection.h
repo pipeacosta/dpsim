@@ -11,6 +11,7 @@
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
 #include <cps/EMT/EMT_Ph3_VoltageSource.h>
+#include <cps/Solver/DAEInterface.h>
 
 namespace CPS {
 	namespace EMT {
@@ -21,6 +22,7 @@ namespace CPS {
 			class NetworkInjection :
 				public SimPowerComp<Real>,
 				public MNAInterface,
+				public DAEInterface,
 				public SharedFactory<NetworkInjection> {
 			private:
 				// ### Electrical Subcomponents ###
@@ -45,7 +47,18 @@ namespace CPS {
 				// #### General ####
 				/// Initializes component from power flow data
 				void initializeFromNodesAndTerminals(Real frequency);
-				/// Setter for reference voltage parameters
+				void setInitialCurrent(MatrixComp initCurrent) { 
+					std::cout << "hola" <<std::endl;
+					mIntfCurrent(0,0) = initCurrent(0,0).real();
+					mIntfCurrent(1,0) = initCurrent(1,0).real();
+					mIntfCurrent(2,0) = initCurrent(2,0).real();
+					std::cout << "hola" <<std::endl;
+				}
+				///
+				void setSourceValue(MatrixComp voltage);
+				///
+				//void initialize(Matrix frequencies);
+				///
 				void setParameters(MatrixComp voltageRef, Real srcFreq = -1);
 
 				// #### MNA Section ####
@@ -92,6 +105,16 @@ namespace CPS {
 					NetworkInjection& mNetworkInjection;
 					Attribute<Matrix>::Ptr mLeftVector;
 				};
+
+				// #### DAE Section ####
+				///
+				void daeInitialize(double time, double state[], double dstate_dt[], int& offset);
+				/// Residual function for DAE Solver
+				void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+				///
+				void daePostStep(const double state[], const double dstate_dt[], int& offset);
+				///
+				int getNumberOfStateVariables() {return 3;}
 			};
 		}
 	}

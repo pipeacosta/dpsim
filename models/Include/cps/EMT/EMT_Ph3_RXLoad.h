@@ -10,6 +10,7 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
+#include <cps/Solver/DAEInterface.h>
 #include <cps/EMT/EMT_Ph3_Capacitor.h>
 #include <cps/EMT/EMT_Ph3_Inductor.h>
 #include <cps/EMT/EMT_Ph3_Resistor.h>
@@ -23,6 +24,7 @@ namespace CPS {
 			class RXLoad :
 				public SimPowerComp<Real>,
 				public MNAInterface,
+				public DAEInterface,
 				public SharedFactory<RXLoad> {
 			protected:
 				/// Power [Watt]
@@ -127,6 +129,18 @@ namespace CPS {
 					RXLoad& mLoad;
 					Attribute<Matrix>::Ptr mLeftVector;
 				};
+
+				//TODO
+				// #### DAE Section ####
+				///
+				void daeInitialize(double time, double state[], double dstate_dt[], int& offset);
+				/// Residual function for DAE Solver
+				void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+				///
+				void daePostStep(const double state[], const double dstate_dt[], int& offset);
+				///
+				int getNumberOfStateVariables() {return 3;}
+
 			};
 		}
 	}

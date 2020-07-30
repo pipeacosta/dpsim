@@ -241,3 +241,125 @@ void EMT::Ph3::RXLoad::mnaUpdateCurrent(const Matrix& leftVector) {
 	if (mSubCapacitor)
 		mIntfCurrent += mSubCapacitor->intfCurrent();
 }
+
+
+// #### DAE functions ####
+
+void EMT::Ph3::RXLoad::daeInitialize(double time, double state[], 
+	double dstate_dt[], int& offset) {
+	// offset: number of component in state, dstate_dt
+	// state[offset] = current through voltage source flowing into node matrixNodeIndex(1)
+	// dstate_dt[offset] = derivative of current through voltage source  (not used yed) --> set to zero
+
+	updateMatrixNodeIndices();
+
+	if (mReactance(0,0) > 0) {
+		// state variable is the inductor current
+		Matrix inductorCurrent = mSubInductor->intfCurrent();
+		Matrix inductorVoltage = mSubInductor->intfVoltage();
+		state[offset] = inductorCurrent(0,0);
+		dstate_dt[offset]   = inductorVoltage(0,0)/mInductance(0,0);
+		state[offset+1] = inductorCurrent(1,0);
+		dstate_dt[offset+1] = inductorVoltage(1,0)/mInductance(1,1);
+		state[offset+2] = inductorCurrent(2,0);
+		dstate_dt[offset+2] = inductorVoltage(2,0)/mInductance(2, 2);
+
+		mSLog->info(
+			"\n--- daeInitialize ---"
+			"\nmReactance(0,0) > 0  --> state variable are inductor currents"
+			"\nAdded current-phase1 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded current-phase2 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded current-phase3 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded derivative of current-phase1 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nAdded derivative of current-phase2 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nAdded derivative of current-phase3 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\n--- daeInitialize finished ---",
+			this->name(), state[offset],
+			this->name(), state[offset+1],
+			this->name(), state[offset+2],
+			this->name(), dstate_dt[offset],
+			this->name(), dstate_dt[offset+1],
+			this->name(), dstate_dt[offset+2]
+		);
+	}
+	else if (mReactance(0,0) < 0) {
+		// state variable is the voltage through capacitor
+		Matrix capacitorCurrent = mSubCapacitor->intfCurrent();
+		Matrix capacitorVoltage = mSubCapacitor->intfVoltage();
+		state[offset] = capacitorVoltage(0,0);
+		dstate_dt[offset]   = capacitorCurrent(0,0)/mCapacitance(0,0);
+		state[offset+1] = capacitorVoltage(1,0);
+		dstate_dt[offset+1] = capacitorCurrent(1,0)/mCapacitance(1,1);
+		state[offset+2] = capacitorVoltage(2,0);
+		dstate_dt[offset+2] = capacitorCurrent(2,0)/mCapacitance(2, 2);
+		
+		mSLog->info(
+			"\n--- daeInitialize ---"
+			"\nmReactance(0,0) < 0  --> state variable are capacitor currentvoltages"
+			"\nAdded voltage-phase1 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded voltage-phase2 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded voltage-phase3 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
+			"\nAdded derivative of voltage-phase1 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nAdded derivative of voltage-phase2 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nAdded derivative of voltage-phase3 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\n--- daeInitialize finished ---",
+			this->name(), state[offset],
+			this->name(), state[offset+1],
+			this->name(), state[offset+2],
+			this->name(), dstate_dt[offset],
+			this->name(), dstate_dt[offset+1],
+			this->name(), dstate_dt[offset+2]
+		);
+	}
+	mSLog->flush();
+	offset+=3;
+}
+
+void EMT::Ph3::RXLoad::daeResidual(double sim_time, 
+	const double state[], const double dstate_dt[], 
+	double resid[], std::vector<int>& off) {
+	/*
+	v = R*i + L*der(i);
+	*/
+
+	int c_offset = off[0]+off[1]; //current offset for component
+
+	if (mReactance(0,0) > 0) {
+		resid[c_offset]   = state[matrixNodeIndex(0, 0)] - mInductance(0,0)*dstate_dt[c_offset]   - state[c_offset]*mResistance(0,0);
+		resid[c_offset+1] = state[matrixNodeIndex(0, 1)] - mInductance(1,1)*dstate_dt[c_offset+1] - state[c_offset+1]*mResistance(1,1);
+		resid[c_offset+2] = state[matrixNodeIndex(0, 2)] - mInductance(2,2)*dstate_dt[c_offset+2] - state[c_offset+2]*mResistance(2,2);
+		resid[matrixNodeIndex(0, 0)] += state[c_offset] ;
+		resid[matrixNodeIndex(0, 1)] += state[c_offset+1];
+		resid[matrixNodeIndex(0, 2)] += state[c_offset+2];
+
+	}
+	else if (mReactance(0,0) < 0)
+	{
+		resid[c_offset]   = (state[matrixNodeIndex(0, 0)]-state[c_offset])*mConductance(0,0)   - mCapacitance(0,0)*dstate_dt[c_offset];
+		resid[c_offset+1] = (state[matrixNodeIndex(0, 1)]-state[c_offset+1])*mConductance(1,1) - mCapacitance(0,0)*dstate_dt[c_offset+1];
+		resid[c_offset+2] = (state[matrixNodeIndex(0, 2)]-state[c_offset+2])*mConductance(2,2) - mCapacitance(0,0)*dstate_dt[c_offset+2];
+		resid[matrixNodeIndex(0, 0)] += (state[matrixNodeIndex(0, 0)] - state[c_offset])*mConductance(0,0);
+		resid[matrixNodeIndex(0, 1)] += (state[matrixNodeIndex(0, 1)] - state[c_offset+1])*mConductance(1,1);
+		resid[matrixNodeIndex(0, 2)] += (state[matrixNodeIndex(0, 2)] - state[c_offset+2])*mConductance(2,2);
+	}
+	
+	off[1] += 3;
+}
+
+void EMT::Ph3::RXLoad::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+	mIntfVoltage(0, 0) = state[matrixNodeIndex(0, 0)];
+	mIntfVoltage(1, 0) = state[matrixNodeIndex(0, 1)];
+	mIntfVoltage(2, 0) = state[matrixNodeIndex(0, 2)];
+	if (mReactance(0,0) > 0) {
+		mIntfCurrent(0, 0) = state[offset++];
+		mIntfCurrent(1, 0) = state[offset++];
+		mIntfCurrent(2, 0) = state[offset++];
+	}
+	else if (mReactance(0,0) < 0)
+	{
+		mIntfCurrent(0, 0) = (state[matrixNodeIndex(0, 0)]-state[offset++])*mConductance(0,0);
+		mIntfCurrent(1, 0) = (state[matrixNodeIndex(0, 1)]-state[offset++])*mConductance(1,1);
+		mIntfCurrent(2, 0) = (state[matrixNodeIndex(0, 2)]-state[offset++])*mConductance(2,2);
+	}
+}
+

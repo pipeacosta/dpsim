@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
 
 	// Define system topology
 	auto sys = SystemTopology(50, SystemNodeList{n1, n2, n3}, SystemComponentList{vs, r1, l1, c1});
-	vs->setInitialCurrent(0.99993);
+	// vs->setInitialCurrent(0.99993);
 
 	// Logger
 	auto logger = DataLogger::make(simName);

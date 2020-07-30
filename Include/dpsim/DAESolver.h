@@ -45,7 +45,6 @@ namespace DPsim {
 		Int mNEQ;
 		/// Components of the Problem
 		CPS::DAEInterface::List mDAEComponents;
-
 		/// Nodes of the Problem
 		typename CPS::SimNode<VarType>::List mNodes;
 

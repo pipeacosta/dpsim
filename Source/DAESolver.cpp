@@ -23,7 +23,7 @@ DAESolver<VarType>::DAESolver(String name,
 	mTimestep(dt) {
 
     // Defines offset vector of the residual which is composed as follows:
-    // mOffset[0] = # nodal voltage equations
+    // mOffset[0] = # nodal voltage equations (1 for SinglePhase nodes, 3 for ThreePhase nodes)
     // mOffset[1] = # of components equations (1 for inductor, cap and voltagesource)
     mOffsets.push_back(0);
     mOffsets.push_back(0);
@@ -41,7 +41,12 @@ DAESolver<VarType>::DAESolver(String name,
                 throw CPS::Exception(); 
             }
             mNodes.push_back(node);
-            mNEQ +=1;
+            if (node->phaseType() == PhaseType::Single) {
+                mNEQ += 1;
+            }
+            else if (node->phaseType() == PhaseType::ABC) {
+                mNEQ += 3;
+            }
             mSLog->info("Added node {:s}", node->name());;
         }
     }
@@ -114,18 +119,50 @@ void DAESolver<VarType>::initialize(Real t0) {
     // capturing a returned array/pointer
     sval  = N_VGetArrayPointer(mStateVector);
     s_dtval = N_VGetArrayPointer_Serial(mDerivativeStateVector);
+
+    // Initialize nodal voltages of state vector
     for (auto node : mNodes) {
-        // Initialize nodal voltages of state vector
-        Real tempVolt = std::real(node->initialSingleVoltage(node->phaseType()));
-        sval[counter] = tempVolt;
-        s_dtval[counter] = 0;
-        mSLog->info(
-		    "Added node '{:s}' to state vector, init voltage = {:f}V",
-            node->name(), sval[counter]);
-		mSLog->info(
-            "Added derivative of the voltage node of '{:s}' to derivative state vector, initial value = {:f}V",
-		    node->name(), s_dtval[counter]);
-        counter++;
+        if (node->phaseType() == PhaseType::Single) {
+            Real tempVolt = std::real(node->initialSingleVoltage(PhaseType::Single));
+            sval[counter] = tempVolt;
+            s_dtval[counter] = 0;
+            mSLog->info(
+		        "Added node '{:s}' to state vector, init voltage = {:f}V"
+                "\nAdded derivative of the voltage node of '{:s}' to derivative state vector, initial value = {:f}",
+                node->name(), sval[counter], node->name(), s_dtval[counter]
+            );
+            counter++;
+        }
+        else if (node->phaseType() == PhaseType::ABC) {
+            Real tempVolt_phase_A = std::real(node->initialSingleVoltage(PhaseType::A));
+            Real tempVolt_phase_B = std::real(node->initialSingleVoltage(PhaseType::B));
+            Real tempVolt_phase_C = std::real(node->initialSingleVoltage(PhaseType::C));
+            sval[counter] = tempVolt_phase_A;
+            s_dtval[counter] = 0;
+            mSLog->info(
+		        "Added node '{:s}'-phase_A to state vector, init voltage = {:f}V"
+                "\nAdded derivative of the voltage node of '{:s}'-phase_A to derivative state vector, initial value = {:f}",
+                node->name(), sval[counter], node->name(), s_dtval[counter]
+            );
+            counter++;
+            sval[counter] = tempVolt_phase_B;
+            s_dtval[counter] = 0;
+            mSLog->info(
+		        "Added node '{:s}'-phase_B to state vector, init voltage = {:f}V"
+                "\nAdded derivative of the voltage node of '{:s}'-phase_B to derivative state vector, initial value = {:f}",
+                node->name(), sval[counter], node->name(), s_dtval[counter]
+            );
+            counter++;
+            sval[counter] = tempVolt_phase_C;
+            s_dtval[counter] = 0;
+            mSLog->info(
+		        "Added node '{:s}'-phase_C to state vector, init voltage = {:f}V"
+                "\nAdded derivative of the voltage node of '{:s}'-phase_C to derivative state vector, initial value = {:f}",
+                node->name(), sval[counter], node->name(), s_dtval[counter]
+            );
+            counter++;
+        }
+
     }
     for (auto daeComp : mDAEComponents) {
         // Initialize component voltages of state vector
@@ -197,10 +234,19 @@ template <typename VarType>
 int DAESolver<VarType>::residualFunction(realtype step_time, 
     N_Vector state, N_Vector dstate_dt, N_Vector resid)
 {
-    mOffsets[0] = mNodes.size(); // Reset Offset of nodes
-    mOffsets[1] = 0;             // Reset Offset of componentes
+    // Reset Offset of nodes
+    mOffsets[0] =0;
+    for (auto node : mNodes) {
+        if (node->phaseType() == PhaseType::Single) {
+            mOffsets[0] +=1;
+        }
+        else if (node->phaseType() == PhaseType::ABC) {
+            mOffsets[0] +=3;
+        }
+    }
+    mOffsets[1] = 0;    // Reset Offset of componentes
 
-    //reset residual functions of nodes
+    //reset residual functions of nodes (nodal equations)
     realtype *residual = NULL;
     residual  = N_VGetArrayPointer(resid);
     for (int i=0; i<mOffsets[0]; i++) {
@@ -237,10 +283,23 @@ Real DAESolver<VarType>::step(Real time) {
     sval  = N_VGetArrayPointer(mStateVector);
     dstate_val  = N_VGetArrayPointer(mDerivativeStateVector);
     mOffsets[0] = 0;             // Reset Offset of nodes
+
+    // Update voltage of nodes
     for (auto node : mNodes) {
-        node->setVoltage(sval[mOffsets[0]]);
-        mOffsets[0] += 1;
+        if (node->phaseType() == PhaseType::Single) {
+            node->setVoltage(sval[mOffsets[0]]);
+            mOffsets[0] +=1;
+        }
+        else if (node->phaseType() == PhaseType::ABC) {
+            node->setVoltage(sval[mOffsets[0]], PhaseType::A);
+            mOffsets[0] +=1;
+            node->setVoltage(sval[mOffsets[0]], PhaseType::B);
+            mOffsets[0] +=1;
+            node->setVoltage(sval[mOffsets[0]], PhaseType::C);
+            mOffsets[0] +=1;
+        }
     }
+    mOffsets[1] = 0;    // Reset Offset of componentes
 
     //update components
     mOffsets[1] = mOffsets[0];      // Reset Offset of componentes

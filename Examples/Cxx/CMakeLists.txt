@@ -82,6 +82,8 @@ if(WITH_SUNDIALS)
 		DAE/DAE_EMT_RL1.cpp
 		DAE/DAE_EMT_RC1.cpp
 		DAE/DAE_EMT_RLC1.cpp
+		DAE/DAE_EMT_Slack_PiLine_RXLoad.cpp
+		DAE/MNA_EMT_Slack_PiLine_RXLoad.cpp
 	)
 endif()
 

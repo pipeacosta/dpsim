@@ -54,13 +54,23 @@ VarType SimNode<VarType>::singleVoltage(PhaseType phaseType) {
 }
 
 template<>
-void SimNode<Complex>::setVoltage(Complex newVoltage) {
-	mVoltage(0, 0) = newVoltage;
+void SimNode<Complex>::setVoltage(Complex newVoltage, PhaseType phaseType) {
+	if (phaseType == PhaseType::B)
+		mVoltage(1, 0) = newVoltage;
+	else if (phaseType == PhaseType::C)
+		mVoltage(2, 0) = newVoltage;
+	else // phaseType == PhaseType::Single || mPhaseType == PhaseType::A
+		mVoltage(0, 0) = newVoltage;
 }
 
 template<>
-void SimNode<Real>::setVoltage(double newVoltage) {
-	mVoltage(0, 0) = newVoltage;
+void SimNode<Real>::setVoltage(double newVoltage, PhaseType phaseType) {
+	if (phaseType == PhaseType::B)
+		mVoltage(1, 0) = newVoltage;
+	else if (phaseType == PhaseType::C)
+		mVoltage(2, 0) = newVoltage;
+	else // phaseType == PhaseType::Single || mPhaseType == PhaseType::A
+		mVoltage(0, 0) = newVoltage;
 }
 
 template<>

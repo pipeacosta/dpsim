@@ -38,8 +38,8 @@ void EMT::Ph1::VoltageSource::mnaInitialize(Real omega, Real timeStep, Attribute
 	MNAInterface::mnaInitialize(omega, timeStep);
 	updateMatrixNodeIndices();
 
-	mVoltageRef = attribute<Complex>("V_ref");
-	mSrcFreq = attribute<Real>("f_src");
+	// mVoltageRef = attribute<Complex>("V_ref");
+	// mSrcFreq = attribute<Real>("f_src");
 	mIntfVoltage(0,0) = Math::abs(mVoltageRef->get()) * cos(Math::phase(mVoltageRef->get()));
 	mMnaTasks.push_back(std::make_shared<MnaPreStep>(*this));
 	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
@@ -133,7 +133,8 @@ void EMT::Ph1::VoltageSource::daeResidual(double sim_time,
 	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0)
 	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1)
 
-	this->daeUpdateVoltage(sim_time);
+	//this->daeUpdateVoltage(sim_time);
+	this->updateVoltage(sim_time);
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component

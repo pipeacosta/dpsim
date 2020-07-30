@@ -93,7 +93,8 @@ namespace CPS {
 		///
 		void setMatrixNodeIndex(UInt phase, UInt matrixNodeIndex) { mMatrixNodeIndex[phase] = matrixNodeIndex; }
 		///
-		void setVoltage(VarType newVoltage) { }
+		//void setVoltage(VarType newVoltage) { }
+		void setVoltage(VarType newVoltage, PhaseType phaseType = PhaseType::Single) { }
 
 		// #### MNA Section ####
 		///
@@ -147,8 +148,8 @@ namespace CPS {
 	void SimNode<Complex>::mnaInitializeHarm(std::vector<Attribute<Matrix>::Ptr> leftVector);
 
 	template<>
-	void SimNode<Complex>::setVoltage(Complex newVoltage);
+	void SimNode<Complex>::setVoltage(Complex newVoltage, PhaseType phaseType);
 
 	template<>
-	void SimNode<Real>::setVoltage(double newVoltage);
+	void SimNode<Real>::setVoltage(double newVoltage, PhaseType phaseType);
 }
