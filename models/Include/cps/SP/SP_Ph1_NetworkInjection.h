@@ -11,7 +11,6 @@
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/PFSolverInterfaceBus.h>
 #include <cps/Solver/MNAInterface.h>
-#include <cps/Solver/DAEInterface.h>
 #include <cps/SP/SP_Ph1_VoltageSource.h>
 
 namespace CPS {
@@ -24,8 +23,7 @@ namespace Ph1 {
 		public SimPowerComp<Complex>,
 		public SharedFactory<NetworkInjection>,
 		public PFSolverInterfaceBus,
-		public MNAInterface,
-		public DAEInterface {
+		public MNAInterface {
 
     private:
 		// ### Electrical Subcomponents ###
@@ -123,20 +121,6 @@ namespace Ph1 {
 			NetworkInjection& mNetworkInjection;
 			Attribute<Matrix>::Ptr mLeftVector;
 		};
-
-		// #### DAE Section ####
-		///
-		Complex daeInitialize() override;
-		// TODO
-		void daeInitialize(double time, double state[], double dstate_dt[], int& counter){};
-		/// Residual function for DAE Solver
-		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) override;
-		//TODO
-		void daePostStep(const double state[], const double dstate_dt[], int& counter){};
-		//TODO
-		int getNumberOfStateVariables() {return 0;}
-
-
 };
 }
 }
