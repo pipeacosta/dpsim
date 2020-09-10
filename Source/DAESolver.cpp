@@ -134,9 +134,9 @@ void DAESolver<VarType>::initialize(Real t0) {
             counter++;
         }
         else if (node->phaseType() == PhaseType::ABC) {
-            Real tempVolt_phase_A = std::real(node->initialSingleVoltage(PhaseType::A));
-            Real tempVolt_phase_B = std::real(node->initialSingleVoltage(PhaseType::B));
-            Real tempVolt_phase_C = std::real(node->initialSingleVoltage(PhaseType::C));
+            Real tempVolt_phase_A = RMS3PH_TO_PEAK1PH*std::real(node->initialSingleVoltage(PhaseType::A));
+            Real tempVolt_phase_B = RMS3PH_TO_PEAK1PH*std::real(node->initialSingleVoltage(PhaseType::B));
+            Real tempVolt_phase_C = RMS3PH_TO_PEAK1PH*std::real(node->initialSingleVoltage(PhaseType::C));
             sval[counter] = tempVolt_phase_A;
             s_dtval[counter] = 0;
             mSLog->info(
@@ -170,8 +170,8 @@ void DAESolver<VarType>::initialize(Real t0) {
     }
 
     // Set relative tolerance and absolute error
-    mRelativeTolerance = RCONST(1.0e-10); // Set relative tolerance
-    mAbsoluteTolerance = RCONST(1.0e-4); // Set absolute error
+    mRelativeTolerance = RCONST(1e-1); // Set relative tolerance  1e-4 = 0.01%
+    mAbsoluteTolerance = RCONST(1e-1); // Set absolute error
 
     // creates the IDA solver memory block
     mIDAMemoryBlock = IDACreate();
@@ -208,15 +208,45 @@ void DAESolver<VarType>::initialize(Real t0) {
 	}
     */
 
+   /*
+    mSLog->info("Call IDASetInitStep");
+    ret = IDASetInitStep(mIDAMemoryBlock, RCONST(1e-10));
+    if (check_retval(&ret, "IDASetInitStep", 1)) {
+    	throw CPS::Exception();
+	}
+    mSLog->info("Call IDASetMaxStep");
+    ret = IDASetMaxStep(mIDAMemoryBlock, RCONST(1e-15));
+    if (check_retval(&ret, "IDASetMaxStep", 1)) {
+    	throw CPS::Exception();
+	}
+    
+    mSLog->info("Call IDASetNonlinConvCoef");
+    ret = IDASetNonlinConvCoef(mIDAMemoryBlock, RCONST(2));
+    if (check_retval(&ret, "IDASetNonlinConvCoef", 1)) {
+    	throw CPS::Exception();
+	}
+    */
+
     mSLog->info("Call IDA Solver Stuff");
     // Allocate and connect Matrix mJacobianMatrix and solver mLinearSolver to IDA
     mJacobianMatrix = SUNDenseMatrix(mNEQ, mNEQ);
     mLinearSolver = SUNDenseLinearSolver(mStateVector, mJacobianMatrix);
     ret = IDADlsSetLinearSolver(mIDAMemoryBlock, mLinearSolver, mJacobianMatrix);
 
+
+    // calculates corrected initial conditions
+    /*
+    ret = IDACalcIC(mIDAMemoryBlock, IDA_Y_INIT, mTimestep);
+    if (check_retval(&ret, "IDACalcIC", 1)) {
+    	throw CPS::Exception();
+	}
+    */
+
     //Optional IDA input functions
-    //ret = IDASetMaxNumSteps(mIDAMemoryBlock, -1);  //Max. number of timesteps until tout (-1 = unlimited)
-    //ret = IDASetMaxConvFails(mIDAMemoryBlock, 100); //Max. number of convergence failures at one step
+    /*
+    ret = IDASetMaxNumSteps(mIDAMemoryBlock, 50000);  //Max. number of timesteps until tout (-1 = unlimited)
+    ret = IDASetMaxConvFails(mIDAMemoryBlock, 50000); //Max. number of convergence failures at one step
+    */
 
     mSLog->info("--- Finished initialization --- \n");
     mSLog->flush();
@@ -266,7 +296,7 @@ int DAESolver<VarType>::residualFunction(realtype step_time,
 template <typename VarType>
 Real DAESolver<VarType>::step(Real time) {
     realtype NextTime = (realtype) time+mTimestep;
-
+       
     int ret = IDASolve(mIDAMemoryBlock, NextTime, &mTimeReachedSolver, mStateVector, mDerivativeStateVector, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
     if (ret != IDA_SUCCESS) {
         mSLog->info("Ida Error: {}", ret);
@@ -274,6 +304,9 @@ Real DAESolver<VarType>::step(Real time) {
         void(IDAGetNumResEvals(mIDAMemoryBlock, &mNumberCallsResidualFunctins));
         mSLog->info("Interal steps: {}", mNumberStepsIDA);
         mSLog->info("Res Eval: {}", mNumberCallsResidualFunctins);
+        mSLog->info("Time Reached Solver: {}", mTimeReachedSolver);
+        mSLog->info("Next Time: {}", NextTime);
+        mSLog->flush();
         throw CPS::Exception();
     } 
 

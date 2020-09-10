@@ -75,7 +75,7 @@ SimPowerComp<Real>::Ptr EMT::Ph3::RXLoad::clone(String name) {
 
 void EMT::Ph3::RXLoad::initializeFromNodesAndTerminals(Real frequency) {
 
-		if (initPowerFromTerminal) {
+	if (initPowerFromTerminal) {
 		mActivePower = Matrix::Zero(3, 3);
 		mActivePower(0, 0) = mTerminals[0]->singleActivePower() / 3.;
 		mActivePower(1, 1) = mTerminals[0]->singleActivePower() / 3.;
@@ -146,13 +146,15 @@ void EMT::Ph3::RXLoad::initializeFromNodesAndTerminals(Real frequency) {
 	// v^T v i^T* = v^T S
 	// i^T*= (|v|^2)^(-1) v^T S
 
-	Complex v_ = vInitABC(0, 0)*vInitABC(0, 0) + vInitABC(1, 0)*vInitABC(1, 0) + vInitABC(2, 0)*vInitABC(2, 0);
+	// Complex v_ = vInitABC(0, 0)*vInitABC(0, 0) + vInitABC(1, 0)*vInitABC(1, 0) + vInitABC(2, 0)*vInitABC(2, 0);
+	Real v_ = pow(abs(vInitABC(0, 0)),2) + pow(abs(vInitABC(1, 0)),2) + pow(abs(vInitABC(2, 0)),2);
 	MatrixComp rhs_ = Complex(1, 0) / v_ * vInitABC.transpose() * mPower;
 	iInitABC = rhs_.conjugate().transpose();
 	mIntfCurrent = iInitABC.real();
 
 	mSLog->info(
 		"\n--- Initialization from powerflow ---"
+		"\ninitialSingleVoltage: {:s}"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
 		"\nTerminal 0 voltage: {:s}"
@@ -160,14 +162,21 @@ void EMT::Ph3::RXLoad::initializeFromNodesAndTerminals(Real frequency) {
 		"\nReactive Power: {:s}"
 		"\nResistance: {:s}"
 		"\nReactance: {:s}"
+		"\nmPower: {:s}"
+		"\nvInitABC: {:s}"
+		"\niInitABC: {:s}"
 		"\n--- Initialization from powerflow finished ---",
+		Logger::phasorToString(mTerminals[0]->initialSingleVoltage()),
 		Logger::matrixToString(mIntfVoltage),
 		Logger::matrixToString(mIntfCurrent),
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(0)),
 		Logger::matrixToString(mActivePower),
 		Logger::matrixToString(mReactivePower),
 		Logger::matrixToString(mResistance),
-		Logger::matrixToString(mReactance));
+		Logger::matrixToString(mReactance),
+		Logger::matrixCompToString(mPower),
+		Logger::matrixCompToString(vInitABC),
+		Logger::matrixCompToString(iInitABC));
 	mSLog->flush();
 
 }
@@ -247,14 +256,12 @@ void EMT::Ph3::RXLoad::mnaUpdateCurrent(const Matrix& leftVector) {
 
 void EMT::Ph3::RXLoad::daeInitialize(double time, double state[], 
 	double dstate_dt[], int& offset) {
-	// offset: number of component in state, dstate_dt
-	// state[offset] = current through voltage source flowing into node matrixNodeIndex(1)
-	// dstate_dt[offset] = derivative of current through voltage source  (not used yed) --> set to zero
 
 	updateMatrixNodeIndices();
 
 	if (mReactance(0,0) > 0) {
 		// state variable is the inductor current
+		Matrix resistorCurrent = mSubResistor->intfCurrent();
 		Matrix inductorCurrent = mSubInductor->intfCurrent();
 		Matrix inductorVoltage = mSubInductor->intfVoltage();
 		state[offset] = inductorCurrent(0,0);
@@ -273,17 +280,25 @@ void EMT::Ph3::RXLoad::daeInitialize(double time, double state[],
 			"\nAdded derivative of current-phase1 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
 			"\nAdded derivative of current-phase2 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
 			"\nAdded derivative of current-phase3 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nInitial current through the resistor-ph1 of RXLoad '{:s}'={:f}A"
+			"\nInitial current through the resistor-ph2 of RXLoad '{:s}'={:f}A"
+			"\nInitial current through the resistor-ph3 of RXLoadd '{:s}'={:f}A"
 			"\n--- daeInitialize finished ---",
 			this->name(), state[offset],
 			this->name(), state[offset+1],
 			this->name(), state[offset+2],
 			this->name(), dstate_dt[offset],
 			this->name(), dstate_dt[offset+1],
-			this->name(), dstate_dt[offset+2]
+			this->name(), dstate_dt[offset+2],
+			this->name(), resistorCurrent(0,0),
+			this->name(), resistorCurrent(1,0),
+			this->name(), resistorCurrent(2,0)
 		);
+		mSLog->flush();
 	}
 	else if (mReactance(0,0) < 0) {
 		// state variable is the voltage through capacitor
+		Matrix resistorCurrent = mSubResistor->intfCurrent();
 		Matrix capacitorCurrent = mSubCapacitor->intfCurrent();
 		Matrix capacitorVoltage = mSubCapacitor->intfVoltage();
 		state[offset] = capacitorVoltage(0,0);
@@ -302,47 +317,61 @@ void EMT::Ph3::RXLoad::daeInitialize(double time, double state[],
 			"\nAdded derivative of voltage-phase1 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
 			"\nAdded derivative of voltage-phase2 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
 			"\nAdded derivative of voltage-phase3 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+			"\nInitial current through the resistor-ph1 of RXLoad '{:s}'={:f}A"
+			"\nInitial current through the resistor-ph2 of RXLoad '{:s}'={:f}A"
+			"\nInitial current through the resistor-ph3 of RXLoadd '{:s}'={:f}A"
 			"\n--- daeInitialize finished ---",
 			this->name(), state[offset],
 			this->name(), state[offset+1],
 			this->name(), state[offset+2],
 			this->name(), dstate_dt[offset],
 			this->name(), dstate_dt[offset+1],
-			this->name(), dstate_dt[offset+2]
+			this->name(), dstate_dt[offset+2],
+			this->name(), resistorCurrent(0,0),
+			this->name(), resistorCurrent(1,0),
+			this->name(), resistorCurrent(2,0)
 		);
 	}
-	mSLog->flush();
+
 	offset+=3;
 }
 
 void EMT::Ph3::RXLoad::daeResidual(double sim_time, 
 	const double state[], const double dstate_dt[], 
 	double resid[], std::vector<int>& off) {
-	/*
-	v = R*i + L*der(i);
-	*/
 
 	int c_offset = off[0]+off[1]; //current offset for component
+	int pos_node1 = matrixNodeIndex(0, 0);
+	int pos_node2 = matrixNodeIndex(0, 1);
+	int pos_node3 = matrixNodeIndex(0, 2);
 
 	if (mReactance(0,0) > 0) {
-		resid[c_offset]   = state[matrixNodeIndex(0, 0)] - mInductance(0,0)*dstate_dt[c_offset]   - state[c_offset]*mResistance(0,0);
-		resid[c_offset+1] = state[matrixNodeIndex(0, 1)] - mInductance(1,1)*dstate_dt[c_offset+1] - state[c_offset+1]*mResistance(1,1);
-		resid[c_offset+2] = state[matrixNodeIndex(0, 2)] - mInductance(2,2)*dstate_dt[c_offset+2] - state[c_offset+2]*mResistance(2,2);
-		resid[matrixNodeIndex(0, 0)] += state[c_offset] ;
-		resid[matrixNodeIndex(0, 1)] += state[c_offset+1];
-		resid[matrixNodeIndex(0, 2)] += state[c_offset+2];
-
+		resid[c_offset]   = state[pos_node1] - mInductance(0,0)*dstate_dt[c_offset];
+		resid[c_offset+1] = state[pos_node2] - mInductance(1,1)*dstate_dt[c_offset+1];
+		resid[c_offset+2] = state[pos_node3] - mInductance(2,2)*dstate_dt[c_offset+2];
+		resid[pos_node1] += state[c_offset]   + state[pos_node1]*mConductance(0,0);
+		resid[pos_node2] += state[c_offset+1] + state[pos_node2]*mConductance(1,1);
+		resid[pos_node3] += state[c_offset+2] + state[pos_node3]*mConductance(2,2);
 	}
-	else if (mReactance(0,0) < 0)
-	{
-		resid[c_offset]   = (state[matrixNodeIndex(0, 0)]-state[c_offset])*mConductance(0,0)   - mCapacitance(0,0)*dstate_dt[c_offset];
-		resid[c_offset+1] = (state[matrixNodeIndex(0, 1)]-state[c_offset+1])*mConductance(1,1) - mCapacitance(0,0)*dstate_dt[c_offset+1];
-		resid[c_offset+2] = (state[matrixNodeIndex(0, 2)]-state[c_offset+2])*mConductance(2,2) - mCapacitance(0,0)*dstate_dt[c_offset+2];
-		resid[matrixNodeIndex(0, 0)] += (state[matrixNodeIndex(0, 0)] - state[c_offset])*mConductance(0,0);
-		resid[matrixNodeIndex(0, 1)] += (state[matrixNodeIndex(0, 1)] - state[c_offset+1])*mConductance(1,1);
-		resid[matrixNodeIndex(0, 2)] += (state[matrixNodeIndex(0, 2)] - state[c_offset+2])*mConductance(2,2);
-	}
+	else if (mReactance(0,0) < 0) {
+		resid[c_offset]   = state[pos_node1] - state[c_offset];
+		resid[c_offset+1] = state[pos_node2] - state[c_offset+1];
+		resid[c_offset+2] = state[pos_node3] - state[c_offset+2];
+		resid[pos_node1] += mCapacitance(0,0)*dstate_dt[c_offset]   + state[pos_node1]*mConductance(0,0);
+		resid[pos_node2] += mCapacitance(1,1)*dstate_dt[c_offset+1] + state[pos_node2]*mConductance(1,1);
+		resid[pos_node3] += mCapacitance(2,2)*dstate_dt[c_offset+2] + state[pos_node3]*mConductance(2,2);
+	}	
+	// else if (mReactance(0,0) == 0) {}
 	
+	/*
+	std::cout << "resid[c_offset]   (RXLOAD) = " << resid[c_offset]   << std::endl;
+	std::cout << "resid[c_offset+1] (RXLOAD) = " << resid[c_offset+1] << std::endl;
+	std::cout << "resid[c_offset+2] (RXLOAD) = " << resid[c_offset+2] << std::endl;
+	std::cout << "resid[pos_node1]  (RXLOAD) = " << resid[c_offset]   << std::endl;
+	std::cout << "resid[pos_node2]  (RXLOAD) = " << resid[c_offset+1] << std::endl;
+	std::cout << "resid[pos_node3]  (RXLOAD) = " << resid[c_offset+2] << std::endl;
+	*/
+
 	off[1] += 3;
 }
 
@@ -350,16 +379,19 @@ void EMT::Ph3::RXLoad::daePostStep(const double state[], const double dstate_dt[
 	mIntfVoltage(0, 0) = state[matrixNodeIndex(0, 0)];
 	mIntfVoltage(1, 0) = state[matrixNodeIndex(0, 1)];
 	mIntfVoltage(2, 0) = state[matrixNodeIndex(0, 2)];
+
 	if (mReactance(0,0) > 0) {
-		mIntfCurrent(0, 0) = state[offset++];
-		mIntfCurrent(1, 0) = state[offset++];
-		mIntfCurrent(2, 0) = state[offset++];
+		mIntfCurrent(0, 0) = state[offset] + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
+		mIntfCurrent(1, 0) = state[offset+1] + state[matrixNodeIndex(0, 1)]*mConductance(1,1);
+		mIntfCurrent(2, 0) = state[offset+2] + state[matrixNodeIndex(0, 2)]*mConductance(2,2);
 	}
 	else if (mReactance(0,0) < 0)
 	{
-		mIntfCurrent(0, 0) = (state[matrixNodeIndex(0, 0)]-state[offset++])*mConductance(0,0);
-		mIntfCurrent(1, 0) = (state[matrixNodeIndex(0, 1)]-state[offset++])*mConductance(1,1);
-		mIntfCurrent(2, 0) = (state[matrixNodeIndex(0, 2)]-state[offset++])*mConductance(2,2);
+		mIntfCurrent(0, 0) = mCapacitance(0,0)*dstate_dt[offset] + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
+		mIntfCurrent(1, 0) = mCapacitance(1,1)*dstate_dt[offset+1] + state[matrixNodeIndex(0, 1)]*mConductance(1,1);
+		mIntfCurrent(2, 0) = mCapacitance(2,2)*dstate_dt[offset+2] + state[matrixNodeIndex(0, 2)]*mConductance(2,2);
 	}
+	//else (mReactance==0.0) {}
+	offset+=3;
 }
 

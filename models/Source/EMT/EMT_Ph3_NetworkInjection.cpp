@@ -150,16 +150,13 @@ void EMT::Ph3::NetworkInjection::mnaUpdateCurrent(const Matrix& leftVector) {
 
 void EMT::Ph3::NetworkInjection::daeInitialize(double time, double state[],
 	double dstate_dt[], int& offset) {
-	// offset: number of component in state, dstate_dt
-	// state[offset] = current through voltage source flowing into node matrixNodeIndex(1)
-	// dstate_dt[offset] = derivative of current through voltage source  (not used yed) --> set to zero
 
 	updateMatrixNodeIndices();
-	state[offset] = mIntfCurrent(0,0);
+	state[offset] = -mIntfCurrent(0,0);
 	dstate_dt[offset] = 0.0;
-	state[offset+1] = mIntfCurrent(1,0);
+	state[offset+1] = -mIntfCurrent(1,0);
 	dstate_dt[offset+1] = 0.0;
-	state[offset+2] = mIntfCurrent(2,0);
+	state[offset+2] = -mIntfCurrent(2,0);
 	dstate_dt[offset+2] = 0.0;
 
 	mSLog->info(
@@ -185,32 +182,40 @@ void EMT::Ph3::NetworkInjection::daeInitialize(double time, double state[],
 void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 	const double state[], const double dstate_dt[],
 	double resid[], std::vector<int>& off) {
-	// state[c_offset] = current through VoltageSource flowing into node matrixNodeIndex(1)
-	// dstate_dt[offset] = derivative of current through voltage source  (not used yed)
-	// resid[c_offset] = v2-v1-v_s = state[Pos2] - state[Pos1] - mIntfVoltage(0,0)
-	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0)
-	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1)
 
 	this->updateVoltage(sim_time);
-	// int pos1 = matrixNodeIndex(PhaseType::A);
-	// int pos2 = matrixNodeIndex(PhaseType::B);
-	// int pos3 = matrixNodeIndex(PhaseType::C);
-
 	int c_offset = off[0]+off[1]; //current offset for component
 
-	resid[c_offset] = -mIntfVoltage(0,0);
-	resid[c_offset+1] = -mIntfVoltage(1,0);
-	resid[c_offset+2] = -mIntfVoltage(2,0);
+	int pos_node1 = matrixNodeIndex(0, 0);
+	int pos_node2 = matrixNodeIndex(0, 1);
+	int pos_node3 = matrixNodeIndex(0, 2);
+	resid[c_offset]   = state[pos_node1] - mIntfVoltage(0,0);
+	resid[c_offset+1] = state[pos_node2] - mIntfVoltage(1,0);
+	resid[c_offset+2] = state[pos_node3] - mIntfVoltage(2,0);
 
 	// update nodal equations
-	resid[matrixNodeIndex(0, 0)] += state[c_offset];
-	resid[matrixNodeIndex(0, 1)] += state[c_offset+1];
-	resid[matrixNodeIndex(0, 2)] += state[c_offset+2];
+	resid[pos_node1] += state[c_offset];
+	resid[pos_node2] += state[c_offset+1];
+	resid[pos_node3] += state[c_offset+2];
+
+	/*
+	std::cout << std::endl << std::endl 
+			  << "resid[c_offset]   (SLACK)= " << resid[c_offset] << std::endl;
+	std::cout << "resid[c_offset+1] (SLACK)= " << resid[c_offset+1] << std::endl;
+	std::cout << "resid[c_offset+2] (SLACK)= " << resid[c_offset+2] << std::endl;
+	std::cout << "state[pos_node1]  (SLACK)="    << state[pos_node1] << std::endl;
+	std::cout << "state[c_offset]   (SLACK)="     << state[c_offset] << std::endl;
+	std::cout << "state[c_offset2]   (SLACK)="     << state[c_offset+1] << std::endl;
+	std::cout << "state[c_offset3]   (SLACK)="     << state[c_offset+2] << std::endl;
+	*/
+
 	off[1]+=3;
 }
 
-void EMT::Ph3::NetworkInjection::daePostStep(const double state[], const double dstate_dt[], int& offset) {
-	mIntfCurrent(0,0) = state[offset++];
-	mIntfCurrent(1,0) = state[offset++];
-	mIntfCurrent(2,0) = state[offset++];
+void EMT::Ph3::NetworkInjection::daePostStep(const double state[], 
+	const double dstate_dt[], int& offset) {
+	
+	mIntfCurrent(0,0) = -state[offset++];
+	mIntfCurrent(1,0) = -state[offset++];
+	mIntfCurrent(2,0) = -state[offset++];
 }

@@ -130,7 +130,6 @@ namespace CPS {
 					Attribute<Matrix>::Ptr mLeftVector;
 				};
 
-				//TODO
 				// #### DAE Section ####
 				///
 				void daeInitialize(double time, double state[], double dstate_dt[], int& offset);
