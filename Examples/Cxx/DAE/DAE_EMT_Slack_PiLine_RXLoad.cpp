@@ -27,21 +27,24 @@ using namespace CPS::EMT::Ph3;
 
 #define SHIFT_TO_PHASE_B Complex(cos(-2 * M_PI / 3), sin(-2 * M_PI / 3))
 #define SHIFT_TO_PHASE_C Complex(cos(2 * M_PI / 3), sin(2 * M_PI / 3))
+#define RMS3PH_TO_PEAK1PH sqrt(2./3.)
+#define PEAK1PH_TO_RMS3PH sqrt(3./2.)
 
 int main(int argc, char* argv[])
 {
-	Real timeStep = 0.0002;
-	Real finalTime = 1;
+	Real timeStep = 0.000001;
+	Real finalTime = 0.1;
 	String simName = "DAE_EMT_Slack_PiLine_RXLoad";
 	Logger::setLogDir("logs/" + simName);
 
 	// Slack
 	auto slack = NetworkInjection::make("slack", Logger::Level::info);
-	MatrixComp initialVoltage_slack = MatrixComp::Zero(3, 1);
-	initialVoltage_slack(0, 0) = Complex(110000, 0);
-	initialVoltage_slack(1, 0) = initialVoltage_slack(0, 0) * SHIFT_TO_PHASE_B;
-	initialVoltage_slack(2, 0) = initialVoltage_slack(0, 0) * SHIFT_TO_PHASE_C;
-	slack->setParameters(initialVoltage_slack, 50);
+	MatrixComp voltageRef_slack = MatrixComp::Zero(3, 1);
+	voltageRef_slack(0, 0) = Complex(110e3, 0);
+	voltageRef_slack(1, 0) = Complex(110e3, 0)*SHIFT_TO_PHASE_B;
+	voltageRef_slack(2, 0) = Complex(110e3, 0)*SHIFT_TO_PHASE_C;
+
+	slack->setParameters(voltageRef_slack, 50);
 
 	// PiLine
 	auto PiLine = PiLine::make("PiLine", Logger::Level::info);
@@ -76,11 +79,15 @@ int main(int argc, char* argv[])
 	auto rxLoad = RXLoad::make("rxLoad", p_load, q_load, 110e3, Logger::Level::info);
 
 	// Nodes
-	std::vector<Complex> initialVoltage_n1{ initialVoltage_slack(0, 0), 
-											initialVoltage_slack(1, 0), 
-											initialVoltage_slack(2, 0)
+	std::vector<Complex> initialVoltage_n1{ voltageRef_slack(0, 0), 
+											voltageRef_slack(1, 0),
+											voltageRef_slack(2, 0)
 										  };
-	std::vector<Complex> initialVoltage_n2{ Complex(110000, 0), Complex(110000, 0)*SHIFT_TO_PHASE_B, Complex(110000, 0)*SHIFT_TO_PHASE_C };
+	Complex init_v2 = PEAK1PH_TO_RMS3PH*Complex(89828.15396, -129.7304793);
+	std::vector<Complex> initialVoltage_n2{ init_v2, 
+											init_v2*SHIFT_TO_PHASE_B,
+											init_v2*SHIFT_TO_PHASE_C
+										  };
 	auto n1 = SimNode::make("n1", PhaseType::ABC, initialVoltage_n1);
 	auto n2 = SimNode::make("n2", PhaseType::ABC, initialVoltage_n2);
 
@@ -94,16 +101,20 @@ int main(int argc, char* argv[])
 
 	// Logger
 	auto logger = DataLogger::make(simName);
-    // logger->addAttribute("vs",  vs->attribute("v_intf"));
-	// logger->addAttribute("i_c", c1->attribute("i_intf"));
-	// logger->addAttribute("v_l", l1->attribute("v_intf"));
-	// logger->addAttribute("v_c", c1->attribute("v_intf"));
-    // logger->addAttribute("v_r", r1->attribute("v_intf"));
+	// logger->addAttribute("v1", n1->attribute("v"));
+    logger->addAttribute("v_slack",  slack->attribute("v_intf"));
+	logger->addAttribute("i_slack",  slack->attribute("i_intf"));
+	logger->addAttribute("v_line",  PiLine->attribute("v_intf"));
+	logger->addAttribute("i_line",  PiLine->attribute("i_intf"));
+	logger->addAttribute("v_load",  rxLoad->attribute("v_intf"));
+	logger->addAttribute("i_load",  rxLoad->attribute("i_intf"));
 
 	MatrixComp initCurrent_slack = MatrixComp::Zero(3, 1);
-	initCurrent_slack(0, 0) = Complex(0, 0);
-	initCurrent_slack(1, 0) = Complex(0, 0);
-	initCurrent_slack(2, 0) = Complex(0, 0);
+	Complex initCurrent = Complex(11.26135211, 60.70524325);
+	initCurrent_slack(0, 0) = initCurrent;
+	initCurrent_slack(1, 0) = initCurrent*SHIFT_TO_PHASE_B;
+	initCurrent_slack(2, 0) = initCurrent*SHIFT_TO_PHASE_C;
+
 	slack->setInitialCurrent(initCurrent_slack);
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);

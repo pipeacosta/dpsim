@@ -53,7 +53,8 @@ void EMT::Ph3::PiLine::initializeFromNodesAndTerminals(Real frequency) {
 		Complex(mSeriesRes(2, 0), omega * mSeriesInd(2, 0)), Complex(mSeriesRes(2, 1), omega * mSeriesInd(2, 1)), Complex(mSeriesRes(2, 2), omega * mSeriesInd(2, 2));
 
 	MatrixComp vInitABC = MatrixComp::Zero(3, 1);
-	vInitABC(0, 0) = RMS3PH_TO_PEAK1PH * initialSingleVoltage(1) - RMS3PH_TO_PEAK1PH * initialSingleVoltage(0);
+	//vInitABC(0, 0) = RMS3PH_TO_PEAK1PH * initialSingleVoltage(1) - RMS3PH_TO_PEAK1PH * initialSingleVoltage(0);
+	vInitABC(0, 0) = RMS3PH_TO_PEAK1PH * initialSingleVoltage(0) - RMS3PH_TO_PEAK1PH * initialSingleVoltage(1);
 	vInitABC(1, 0) = vInitABC(0, 0) * SHIFT_TO_PHASE_B;
 	vInitABC(2, 0) = vInitABC(0, 0) * SHIFT_TO_PHASE_C;
 	MatrixComp iInit = impedance.inverse() * vInitABC;
@@ -67,18 +68,20 @@ void EMT::Ph3::PiLine::initializeFromNodesAndTerminals(Real frequency) {
 	vInitTerm0(1, 0) = vInitTerm0(0, 0) * SHIFT_TO_PHASE_B;
 	vInitTerm0(2, 0) = vInitTerm0(0, 0) * SHIFT_TO_PHASE_C;
 
-	mVirtualNodes[0]->setInitialVoltage(PEAK1PH_TO_RMS3PH*(vInitTerm0 + mSeriesRes * iInit));
+	//mVirtualNodes[0]->setInitialVoltage(PEAK1PH_TO_RMS3PH*(vInitTerm0 + mSeriesRes * iInit));
+	mVirtualNodes[0]->setInitialVoltage(PEAK1PH_TO_RMS3PH*(vInitTerm0 - mSeriesRes * iInit));
 
 	// Create series sub components
 	mSubSeriesResistor = std::make_shared<EMT::Ph3::Resistor>(mName + "_res", mLogLevel);
 	mSubSeriesResistor->setParameters(mSeriesRes);
-	mSubSeriesResistor->connect({ mTerminals[0]->node(), mVirtualNodes[0] });
+	mSubSeriesResistor->connect({ mVirtualNodes[0], mTerminals[0]->node()});
 	mSubSeriesResistor->initialize(mFrequencies);
 	mSubSeriesResistor->initializeFromNodesAndTerminals(frequency);
 
 	mSubSeriesInductor = std::make_shared<EMT::Ph3::Inductor>(mName + "_ind", mLogLevel);
 	mSubSeriesInductor->setParameters(mSeriesInd);
-	mSubSeriesInductor->connect({ mVirtualNodes[0], mTerminals[1]->node() });
+	//mSubSeriesInductor->connect({ mVirtualNodes[0], mTerminals[1]->node() });
+	mSubSeriesInductor->connect({ mTerminals[1]->node(), mVirtualNodes[0]});
 	mSubSeriesInductor->initialize(mFrequencies);
 	mSubSeriesInductor->initializeFromNodesAndTerminals(frequency);
 
@@ -266,9 +269,6 @@ void EMT::Ph3::PiLine::mnaUpdateCurrent(const Matrix& leftVector) {
 
 void EMT::Ph3::PiLine::daeInitialize(double time, double state[],
 	double dstate_dt[], int& offset) {
-	// offset: number of component in state, dstate_dt
-	// state[offset] = current through voltage source flowing into node matrixNodeIndex(1)
-	// dstate_dt[offset] = derivative of current through voltage source  (not used yed) --> set to zero
 
 	updateMatrixNodeIndices();
 
@@ -282,31 +282,41 @@ void EMT::Ph3::PiLine::daeInitialize(double time, double state[],
 	state[offset+2] = inductorCurrent(2,0);
 	dstate_dt[offset+2] = inductorVoltage(2,0)/mSeriesInd(2, 2);
 
-
 	// Modify initial value of derivative of node voltages
 	Matrix capacitor0Current = mSubParallelCapacitor0->intfCurrent();
 	Matrix capacitor1Current = mSubParallelCapacitor1->intfCurrent();
 	if (mParallelCond(0,0) > 0) {
 		if (terminalNotGrounded(1)) {
-			dstate_dt[matrixNodeIndex(1, 0)] = capacitor0Current(0,0)/mParallelCap(0,0);
-			dstate_dt[matrixNodeIndex(1, 1)] = capacitor0Current(1,0)/mParallelCap(1,1);
-			dstate_dt[matrixNodeIndex(1, 2)] = capacitor0Current(2,0)/mParallelCap(2,2);
+			dstate_dt[matrixNodeIndex(1, 0)] = capacitor1Current(0,0)/(mParallelCap(0,0)/2);
+			dstate_dt[matrixNodeIndex(1, 1)] = capacitor1Current(1,0)/(mParallelCap(1,1)/2);
+			dstate_dt[matrixNodeIndex(1, 2)] = capacitor1Current(2,0)/(mParallelCap(2,2)/2);
 		}
 		if (terminalNotGrounded(0)) {
-			dstate_dt[matrixNodeIndex(0, 0)] = capacitor1Current(0,0)/mParallelCap(0,0);
-			dstate_dt[matrixNodeIndex(0, 1)] = capacitor1Current(1,0)/mParallelCap(1,1);
-			dstate_dt[matrixNodeIndex(0, 2)] = capacitor1Current(2,0)/mParallelCap(2,2);
+			dstate_dt[matrixNodeIndex(0, 0)] = capacitor0Current(0,0)/(mParallelCap(0,0)/2);
+			dstate_dt[matrixNodeIndex(0, 1)] = capacitor0Current(1,0)/(mParallelCap(1,1)/2);
+			dstate_dt[matrixNodeIndex(0, 2)] = capacitor0Current(2,0)/(mParallelCap(2,2)/2);
 		}
 	}
+	//else if (mParallelCond(0,0) <= 0) {...}
 
+	Matrix resistorCurrent = mSubParallelResistor0->intfCurrent();
 	mSLog->info(
 		"\n--- daeInitialize ---"
+		"\nCurrent-phase1 through G0 of PiLine '{:s}' to state vector, initial value={:f}A"
+		"\nCurrent-phase2 through G0 of PiLine '{:s}' to state vector, initial value={:f}A"
+		"\nCurrent-phase3 through G0 of PiLine '{:s}' to state vector, initial value={:f}A"
 		"\nAdded current-phase1 through the inductor of PiLine '{:s}' to state vector, initial value={:f}A"
 		"\nAdded current-phase2 through the inductor of PiLine '{:s}' to state vector, initial value={:f}A"
 		"\nAdded current-phase3 through the inductor of PiLine '{:s}' to state vector, initial value={:f}A"
 		"\nAdded derivative of current-phase1 through the inductor of PiLine '{:s}' to derivative state vector, initial value={:f}"
 		"\nAdded derivative of current-phase2 through the inductor of PiLine '{:s}' to derivative state vector, initial value={:f}"
 		"\nAdded derivative of current-phase3 through the inductor of PiLine '{:s}' to derivative state vector, initial value={:f}"
+		"\nInitial value of current of capacitor0-phaseA of PiLine '{:s}' ={:f}"
+		"\nInitial value of current of capacitor0-phaseB of PiLine '{:s}' ={:f}"
+		"\nInitial value of current of capacitor0-phaseC of PiLine '{:s}' ={:f}"
+		"\nInitial value of current of capacitor1-phaseA of PiLine '{:s}' ={:f}"
+		"\nInitial value of current of capacitor1-phaseB of PiLine '{:s}' ={:f}"
+		"\nInitial value of current of capacitor1-phaseC of PiLine '{:s}' ={:f}"
 		"\nSet initial value of derivative of node voltage of capacitor0-phaseA of PiLine '{:s}' ={:f}"
 		"\nSet initial value of derivative of node voltage of capacitor0-phaseB of PiLine '{:s}' ={:f}"
 		"\nSet initial value of derivative of node voltage of capacitor0-phaseC of PiLine '{:s}' ={:f}"
@@ -314,12 +324,21 @@ void EMT::Ph3::PiLine::daeInitialize(double time, double state[],
 		"\nSet initial value of derivative of node voltage of capacitor1-phaseB of PiLine '{:s}' ={:f}"
 		"\nSet initial value of derivative of node voltage of capacitor1-phaseC of PiLine '{:s}' ={:f}"
 		"\n--- daeInitialize finished ---",
+		this->name(), resistorCurrent(0,0),
+		this->name(), resistorCurrent(1,0),
+		this->name(), resistorCurrent(2,0),
 		this->name(), state[offset],
 		this->name(), state[offset+1],
 		this->name(), state[offset+2],
 		this->name(), dstate_dt[offset],
 		this->name(), dstate_dt[offset+1],
 		this->name(), dstate_dt[offset+2],
+		this->name(), capacitor0Current(0,0),
+		this->name(), capacitor0Current(1,0),
+		this->name(), capacitor0Current(2,0),
+		this->name(), capacitor1Current(0,0),
+		this->name(), capacitor1Current(1,0),
+		this->name(), capacitor1Current(2,0),
 		this->name(), dstate_dt[matrixNodeIndex(0, 0)],
 		this->name(), dstate_dt[matrixNodeIndex(0, 1)],
 		this->name(), dstate_dt[matrixNodeIndex(0, 2)],
@@ -327,7 +346,6 @@ void EMT::Ph3::PiLine::daeInitialize(double time, double state[],
 		this->name(), dstate_dt[matrixNodeIndex(1, 1)],
 		this->name(), dstate_dt[matrixNodeIndex(1, 2)]
 	);
-	std::cout << "test\n";
 	mSLog->flush();
 	offset+=3;
 }
@@ -335,47 +353,55 @@ void EMT::Ph3::PiLine::daeInitialize(double time, double state[],
 void EMT::Ph3::PiLine::daeResidual(double sim_time,
 	const double state[], const double dstate_dt[],
 	double resid[], std::vector<int>& off) {
+
+	int c_offset = off[0]+off[1]; 			//current offset for component
+	int pos_node1a = matrixNodeIndex(0, 0);
+	int pos_node1b = matrixNodeIndex(0, 1);
+	int pos_node1c = matrixNodeIndex(0, 2);
+	int pos_node2a = matrixNodeIndex(1, 0);
+	int pos_node2b = matrixNodeIndex(1, 1);
+	int pos_node2c = matrixNodeIndex(1, 2);
+
+	// residual function of inductors: node1_voltage - node2_voltage - v_r(t) - v_l(t) = 0
+	resid[c_offset]   = state[pos_node1a] - state[pos_node2a] - state[c_offset]*mSeriesRes(0,0)   - mSeriesInd(0, 0)*dstate_dt[c_offset];
+	resid[c_offset+1] = state[pos_node1b] - state[pos_node2b] - state[c_offset+1]*mSeriesRes(1,1) - mSeriesInd(1, 1)*dstate_dt[c_offset+1];
+	resid[c_offset+2] = state[pos_node1c] - state[pos_node2c] - state[c_offset+2]*mSeriesRes(2,2) - mSeriesInd(2, 2)*dstate_dt[c_offset+2];
+
+	// update voltage nodal equations:
+	resid[pos_node1a] += state[c_offset]    + state[pos_node1a]*mParallelCond(0,0)/2 + dstate_dt[pos_node1a]*mParallelCap(0,0)/2;
+	resid[pos_node1b] += state[c_offset+1]  + state[pos_node1b]*mParallelCond(1,1)/2 + dstate_dt[pos_node1b]*mParallelCap(1,1)/2;
+	resid[pos_node1c] += state[c_offset+2]  + state[pos_node1c]*mParallelCond(2,2)/2 + dstate_dt[pos_node1c]*mParallelCap(2,2)/2;
+	resid[pos_node2a] += -state[c_offset]   + state[pos_node2a]*mParallelCond(0,0)/2 + dstate_dt[pos_node2a]*mParallelCap(0,0)/2;
+	resid[pos_node2b] += -state[c_offset+1] + state[pos_node2b]*mParallelCond(1,1)/2 + dstate_dt[pos_node2b]*mParallelCap(1,1)/2;
+	resid[pos_node2c] += -state[c_offset+2] + state[pos_node2c]*mParallelCond(2,2)/2 + dstate_dt[pos_node2c]*mParallelCap(2,2)/2;
+
 	/*
-	R*i_rx + L*der(i_rx) = v1 - v2;
-    i1 = i_rx + G/2*v1 + C/2*der(v1);
-    -i2 = -i_rx + G/2*v2 + C/2*der(v2);
+	std::cout << "Current           (PILINE)="  << (state[pos_node1a]-state[pos_node2a])/mSeriesRes(0,0) << std::endl;
+	std::cout << "Current           (PILINE)="  << (state[pos_node1b]-state[pos_node2b])/mSeriesRes(0,0) << std::endl;
+	std::cout << "Current           (PILINE)="  << (state[pos_node1c]-state[pos_node2c])/mSeriesRes(0,0) << std::endl;
+	std::cout << "Current C         (PILINE)="  << dstate_dt[pos_node1a]*mParallelCap(0,0)/2 << std::endl;
+	std::cout << "Current C         (PILINE)="  << dstate_dt[pos_node1b]*mParallelCap(0,0)/2 << std::endl;
+	std::cout << "Current C         (PILINE)="  << dstate_dt[pos_node1c]*mParallelCap(0,0)/2 << std::endl;
+	std::cout << "resid[pos_node1a] (PILINE)= " << resid[pos_node1a] << std::endl;
+	std::cout << "resid[pos_node1b] (PILINE)= " << resid[pos_node1b] << std::endl;
+	std::cout << "resid[pos_node1c] (PILINE)= " << resid[pos_node1c] << std::endl;
 	*/
-
-	int c_offset = off[0]+off[1]; //current offset for component
-
-	resid[c_offset]   = -mSeriesInd(0, 0)*dstate_dt[c_offset]   - state[c_offset]*mSeriesRes(0,0);
-	resid[c_offset+1] = -mSeriesInd(1, 1)*dstate_dt[c_offset+1] - state[c_offset]*mSeriesRes(1,1);
-	resid[c_offset+2] = -mSeriesInd(2, 2)*dstate_dt[c_offset+2] - state[c_offset]*mSeriesRes(2,2);
-	if (terminalNotGrounded(0)) {
-		resid[c_offset]   -= state[matrixNodeIndex(0, 0)];
-		resid[c_offset+1] -= state[matrixNodeIndex(0, 1)];
-		resid[c_offset+2] -= state[matrixNodeIndex(0, 2)];
-		resid[matrixNodeIndex(0, 0)] -= state[c_offset] ;
-		resid[matrixNodeIndex(0, 1)] -= state[c_offset+1];
-		resid[matrixNodeIndex(0, 2)] -= state[c_offset+2];
-		resid[matrixNodeIndex(0, 0)] += -state[c_offset] + mParallelCap(0,0)*dstate_dt[matrixNodeIndex(0, 0)]/2 + state[matrixNodeIndex(0, 0)]*mParallelCond(0,0)/2;
-		resid[matrixNodeIndex(0, 1)] += -state[c_offset+1] + mParallelCap(1,1)*dstate_dt[matrixNodeIndex(0, 1)]/2 + state[matrixNodeIndex(0, 1)]*mParallelCond(1,1)/2;
-		resid[matrixNodeIndex(0, 2)] += -state[c_offset+2] + mParallelCap(2,2)*dstate_dt[matrixNodeIndex(0, 2)]/2 + state[matrixNodeIndex(0, 2)]*mParallelCond(2,2)/2;
-	}
-	if (terminalNotGrounded(1)) {
-		resid[c_offset]   += state[matrixNodeIndex(1, 0)];
-		resid[c_offset+1] += state[matrixNodeIndex(1, 1)];
-		resid[c_offset+1] += state[matrixNodeIndex(1, 2)];
-		resid[matrixNodeIndex(1, 0)] += state[c_offset] + mParallelCap(0,0)*dstate_dt[matrixNodeIndex(1, 0)]/2 + state[matrixNodeIndex(1, 0)]*mParallelCond(0,0)/2;
-		resid[matrixNodeIndex(1, 1)] += state[c_offset+1] + mParallelCap(1,1)*dstate_dt[matrixNodeIndex(1, 1)]/2 + state[matrixNodeIndex(1, 1)]*mParallelCond(1,1)/2;
-		resid[matrixNodeIndex(1, 2)] += state[c_offset+2] + mParallelCap(2,2)*dstate_dt[matrixNodeIndex(1, 2)]/2 + state[matrixNodeIndex(1, 2)]*mParallelCond(2,2)/2;
-	}
-
 	off[1] += 3;
-
 }
 
 void EMT::Ph3::PiLine::daePostStep(const double state[], const double dstate_dt[], int& offset) {
-	mIntfVoltage(0,0) = state[matrixNodeIndex(1, 0)] - state[matrixNodeIndex(0, 0)];
-	mIntfVoltage(1,0) = state[matrixNodeIndex(1, 1)] - state[matrixNodeIndex(0, 1)];
-	mIntfVoltage(2,0) = state[matrixNodeIndex(1, 2)] - state[matrixNodeIndex(0, 2)];
-	mIntfCurrent(0,0) = state[offset++];
-	mIntfCurrent(1,0) = state[offset++];
-	mIntfCurrent(2,0) = state[offset++];
+	int pos_node1a = matrixNodeIndex(0, 0);
+	int pos_node1b = matrixNodeIndex(0, 1);
+	int pos_node1c = matrixNodeIndex(0, 2);
+	int pos_node2a = matrixNodeIndex(1, 0);
+	int pos_node2b = matrixNodeIndex(1, 1);
+	int pos_node2c = matrixNodeIndex(1, 2);
+	
+	mIntfVoltage(0,0) = state[matrixNodeIndex(0, 0)] - state[matrixNodeIndex(1, 0)];
+	mIntfVoltage(1,0) = state[matrixNodeIndex(0, 1)] - state[matrixNodeIndex(1, 1)];
+	mIntfVoltage(2,0) = state[matrixNodeIndex(0, 2)] - state[matrixNodeIndex(1, 2)];
+	mIntfCurrent(0,0) = (state[pos_node1a]-state[pos_node2a])/mSeriesRes(0,0);
+	mIntfCurrent(1,0) = (state[pos_node1b]-state[pos_node2b])/mSeriesRes(1,1);
+	mIntfCurrent(2,0) = (state[pos_node1c]-state[pos_node2c])/mSeriesRes(2,2);
 }
 

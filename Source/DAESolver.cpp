@@ -206,9 +206,7 @@ void DAESolver<VarType>::initialize(Real t0) {
     if (check_retval(&ret, "IDASetStopTime", 1)) {
     	throw CPS::Exception();
 	}
-    */
 
-   /*
     mSLog->info("Call IDASetInitStep");
     ret = IDASetInitStep(mIDAMemoryBlock, RCONST(1e-10));
     if (check_retval(&ret, "IDASetInitStep", 1)) {
@@ -221,7 +219,7 @@ void DAESolver<VarType>::initialize(Real t0) {
 	}
     
     mSLog->info("Call IDASetNonlinConvCoef");
-    ret = IDASetNonlinConvCoef(mIDAMemoryBlock, RCONST(2));
+    ret = IDASetNonlinConvCoef(mIDAMemoryBlock, RCONST(0.33));
     if (check_retval(&ret, "IDASetNonlinConvCoef", 1)) {
     	throw CPS::Exception();
 	}
