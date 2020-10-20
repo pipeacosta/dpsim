@@ -47,11 +47,14 @@ void EMT::Ph3::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 		"\nCurrent: {:s}"
 		"\nTerminal 0 voltage: {:s}"
 		"\nTerminal 1 voltage: {:s}"
+		"\nResistance Matrix: {:s}"
 		"\n--- Initialization from powerflow finished ---",
 		Logger::matrixToString(mIntfVoltage),
 		Logger::matrixToString(mIntfCurrent),
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(0)),
-		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)));
+		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)),
+		Logger::matrixToString(mResistance));
+	mSLog->flush();
 }
 
 void EMT::Ph3::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
@@ -155,4 +158,57 @@ void EMT::Ph3::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
 		Logger::matrixToString(mIntfCurrent)
 	);
 	mSLog->flush();
+}
+
+
+// #### DAE Section ####
+
+/// Initialize state and derivative of state variables
+void EMT::Ph3::Resistor::daeInitialize(double time, double state[], double dstate_dt[], int& counter){
+	updateMatrixNodeIndices();
+	mSLog->info(
+		"\n--- daeInitialize ---"
+		"\nno variable was added by the 3Ph-resistor '{:s}' to the state vector"
+		"\n--- daeInitialize finished ---",
+		this->name());
+}
+
+///Residual Function for DAE Solver
+void EMT::Ph3::Resistor::daeResidual(double time, 
+	const double state[], const double dstate_dt[], 
+	double resid[], std::vector<int>& off){
+	
+	// positive current flows from noded 1 into node 0
+	
+	if (terminalNotGrounded(0)) {
+		resid[matrixNodeIndex(0, 0)] -= state[matrixNodeIndex(0, 0)]*mConductance(0, 0);
+		resid[matrixNodeIndex(0, 1)] -= state[matrixNodeIndex(0, 1)]*mConductance(1, 1);
+		resid[matrixNodeIndex(0, 2)] -= state[matrixNodeIndex(0, 2)]*mConductance(2, 2);
+	}
+	if (terminalNotGrounded(1)) {
+		resid[matrixNodeIndex(1, 0)] += state[matrixNodeIndex(1, 0)]*mConductance(0, 0);
+		resid[matrixNodeIndex(1, 1)] += state[matrixNodeIndex(1, 1)]*mConductance(1, 1);
+		resid[matrixNodeIndex(1, 2)] += state[matrixNodeIndex(1, 2)]*mConductance(2, 2);
+	}
+}
+
+///
+void EMT::Ph3::Resistor::daePostStep(const double state[], const double dstate_dt[], int& counter) {
+	mIntfVoltage(0, 0) = 0.0;
+	mIntfVoltage(1, 0) = 0.0;
+	mIntfVoltage(2, 0) = 0.0;
+	if (terminalNotGrounded(0)) {
+		mIntfVoltage(0, 0) -= state[matrixNodeIndex(0, 0)];
+		mIntfVoltage(1, 0) -= state[matrixNodeIndex(0, 1)];
+		mIntfVoltage(2, 0) -= state[matrixNodeIndex(0, 2)];
+	}
+	if (terminalNotGrounded(1)) {
+		mIntfVoltage(0, 0) += state[matrixNodeIndex(1, 0)];
+		mIntfVoltage(1, 0) += state[matrixNodeIndex(1, 1)];
+		mIntfVoltage(2, 0) += state[matrixNodeIndex(1, 2)];
+	}
+	
+	mIntfCurrent(0,0) = mIntfVoltage(0,0)*mConductance(0, 0);
+	mIntfCurrent(1,0) = mIntfVoltage(1,0)*mConductance(1, 1);
+	mIntfCurrent(2,0) = mIntfVoltage(2,0)*mConductance(2, 2);
 }
