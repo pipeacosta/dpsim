@@ -170,8 +170,8 @@ void DAESolver<VarType>::initialize(Real t0) {
     }
 
     // Set relative tolerance and absolute error
-    mRelativeTolerance = RCONST(1e-4); // Set relative tolerance  1e-4 = 0.01%
-    mAbsoluteTolerance = RCONST(1e-4); // Set absolute error
+    mRelativeTolerance = RCONST(1e-1); // Set relative tolerance  1e-4 = 0.01%
+    mAbsoluteTolerance = RCONST(1e-1); // Set absolute error
 
     // creates the IDA solver memory block
     mIDAMemoryBlock = IDACreate();

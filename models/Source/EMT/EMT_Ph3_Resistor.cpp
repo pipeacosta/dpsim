@@ -181,15 +181,44 @@ void EMT::Ph3::Resistor::daeResidual(double time,
 	// positive current flows from noded 1 into node 0
 	
 	if (terminalNotGrounded(0)) {
-		resid[matrixNodeIndex(0, 0)] -= state[matrixNodeIndex(0, 0)]*mConductance(0, 0);
-		resid[matrixNodeIndex(0, 1)] -= state[matrixNodeIndex(0, 1)]*mConductance(1, 1);
-		resid[matrixNodeIndex(0, 2)] -= state[matrixNodeIndex(0, 2)]*mConductance(2, 2);
+		resid[matrixNodeIndex(0, 0)] += state[matrixNodeIndex(0, 0)]*mConductance(0, 0);
+		resid[matrixNodeIndex(0, 1)] += state[matrixNodeIndex(0, 1)]*mConductance(1, 1);
+		resid[matrixNodeIndex(0, 2)] += state[matrixNodeIndex(0, 2)]*mConductance(2, 2);
+
+		resid[matrixNodeIndex(1, 0)] -= state[matrixNodeIndex(0, 0)]*mConductance(0, 0);
+		resid[matrixNodeIndex(1, 1)] -= state[matrixNodeIndex(0, 1)]*mConductance(1, 1);
+		resid[matrixNodeIndex(1, 2)] -= state[matrixNodeIndex(0, 2)]*mConductance(2, 2);
 	}
 	if (terminalNotGrounded(1)) {
 		resid[matrixNodeIndex(1, 0)] += state[matrixNodeIndex(1, 0)]*mConductance(0, 0);
 		resid[matrixNodeIndex(1, 1)] += state[matrixNodeIndex(1, 1)]*mConductance(1, 1);
 		resid[matrixNodeIndex(1, 2)] += state[matrixNodeIndex(1, 2)]*mConductance(2, 2);
+
+		resid[matrixNodeIndex(0, 0)] -= state[matrixNodeIndex(1, 0)]*mConductance(0, 0);
+		resid[matrixNodeIndex(0, 1)] -= state[matrixNodeIndex(1, 1)]*mConductance(1, 1);
+		resid[matrixNodeIndex(0, 2)] -= state[matrixNodeIndex(1, 2)]*mConductance(2, 2);
 	}
+
+	mSLog->info(
+		"\n\n--- 3Ph-Resistor - SimStep = {:f} ---"
+		"\nupdate nodal equations of node 0"
+		"\nresid[matrixNodeIndex(0, 0)] += (state[matrixNodeIndex(0, 0)]-state[matrixNodeIndex(1, 0))*mConductance(0, 0) = ({:f} - {:f})*{:f} = {:f}"
+		"\nresid[matrixNodeIndex(0, 1)] += (state[matrixNodeIndex(0, 1)]-state[matrixNodeIndex(1, 1))*mConductance(1, 1) = ({:f} - {:f})*{:f} = {:f}"
+		"\nresid[matrixNodeIndex(0, 2)] += (state[matrixNodeIndex(0, 2)]-state[matrixNodeIndex(1, 2))*mConductance(2, 2) = ({:f} - {:f})*{:f} = {:f}"
+
+		"\nupdate nodal equations of node 1"
+		"\nresid[matrixNodeIndex(1, 0)] += (state[matrixNodeIndex(1, 0)]-state[matrixNodeIndex(0, 0))*mConductance(0, 0) = ({:f} - {:f})*{:f} = {:f}"
+		"\nresid[matrixNodeIndex(1, 1)] += (state[matrixNodeIndex(1, 1)]-state[matrixNodeIndex(0, 1))*mConductance(1, 1) = ({:f} - {:f})*{:f} = {:f}"
+		"\nresid[matrixNodeIndex(1, 2)] += (state[matrixNodeIndex(1, 2)]-state[matrixNodeIndex(0, 2))*mConductance(2, 2) = ({:f} - {:f})*{:f} = {:f}",
+
+		time,
+		state[matrixNodeIndex(0, 0)], state[matrixNodeIndex(1, 0)], mConductance(0, 0), resid[matrixNodeIndex(0, 0)],
+		state[matrixNodeIndex(0, 1)], state[matrixNodeIndex(1, 1)], mConductance(1, 1), resid[matrixNodeIndex(0, 1)],
+		state[matrixNodeIndex(0, 2)], state[matrixNodeIndex(1, 2)], mConductance(2, 2), resid[matrixNodeIndex(0, 2)],
+		state[matrixNodeIndex(1, 0)], state[matrixNodeIndex(0, 0)], mConductance(0, 0), resid[matrixNodeIndex(1, 0)],
+		state[matrixNodeIndex(1, 1)], state[matrixNodeIndex(0, 1)], mConductance(1, 1), resid[matrixNodeIndex(1, 1)],
+		state[matrixNodeIndex(1, 2)], state[matrixNodeIndex(0, 2)], mConductance(2, 2), resid[matrixNodeIndex(1, 2)]
+	);
 }
 
 ///

@@ -151,12 +151,13 @@ void EMT::Ph3::NetworkInjection::mnaUpdateCurrent(const Matrix& leftVector) {
 void EMT::Ph3::NetworkInjection::daeInitialize(double time, double state[],
 	double dstate_dt[], int& offset) {
 
+	//current is positive when flows out of the network injection
 	updateMatrixNodeIndices();
-	state[offset] = -mIntfCurrent(0,0);
+	state[offset] = mIntfCurrent(0,0);
 	dstate_dt[offset] = 0.0;
-	state[offset+1] = -mIntfCurrent(1,0);
+	state[offset+1] = mIntfCurrent(1,0);
 	dstate_dt[offset+1] = 0.0;
-	state[offset+2] = -mIntfCurrent(2,0);
+	state[offset+2] = mIntfCurrent(2,0);
 	dstate_dt[offset+2] = 0.0;
 
 	mSLog->info(
@@ -194,20 +195,30 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 	resid[c_offset+2] = state[pos_node3] - mIntfVoltage(2,0);
 
 	// update nodal equations
-	resid[pos_node1] += state[c_offset];
-	resid[pos_node2] += state[c_offset+1];
-	resid[pos_node3] += state[c_offset+2];
+	resid[pos_node1] -= state[c_offset];
+	resid[pos_node2] -= state[c_offset+1];
+	resid[pos_node3] -= state[c_offset+2];
 
-	/*
-	std::cout << std::endl << std::endl 
-			  << "resid[c_offset]   (SLACK)= " << resid[c_offset] << std::endl;
-	std::cout << "resid[c_offset+1] (SLACK)= " << resid[c_offset+1] << std::endl;
-	std::cout << "resid[c_offset+2] (SLACK)= " << resid[c_offset+2] << std::endl;
-	std::cout << "state[pos_node1]  (SLACK)="    << state[pos_node1] << std::endl;
-	std::cout << "state[c_offset]   (SLACK)="     << state[c_offset] << std::endl;
-	std::cout << "state[c_offset2]   (SLACK)="     << state[c_offset+1] << std::endl;
-	std::cout << "state[c_offset3]   (SLACK)="     << state[c_offset+2] << std::endl;
-	*/
+	mSLog->info(
+		"\n\n--- NetworkInjection - SimStep = {:f} ---"
+		"\nresid[c_offset]   = state[pos_node1] - mIntfVoltage(0,0) = {:f} - {:f} = {:f}"
+		"\nresid[c_offset+1] = state[pos_node2] - mIntfVoltage(1,0) = {:f} - {:f} = {:f}"
+		"\nresid[c_offset+2] = state[pos_node3] - mIntfVoltage(2,0) = {:f} - {:f} = {:f}"
+
+		"\nupdate nodal equations:"
+		"\resid[pos_node1] -= state[c_offset]   --> resid[pos_node1] -= {:f}"
+		"\resid[pos_node2] -= state[c_offset+1] --> resid[pos_node2] -= {:f}"
+		"\resid[pos_node3] -= state[c_offset+2] --> resid[pos_node3] -= {:f}",
+
+		sim_time,
+		state[pos_node1], mIntfVoltage(0,0), resid[c_offset],
+		state[pos_node2], mIntfVoltage(1,0), resid[c_offset+1],
+		state[pos_node3], mIntfVoltage(2,0), resid[c_offset+2],
+		state[c_offset],
+		state[c_offset+1],
+		state[c_offset+2] 
+	);
+	mSLog->flush();
 
 	off[1]+=3;
 }
@@ -215,7 +226,7 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 void EMT::Ph3::NetworkInjection::daePostStep(const double state[], 
 	const double dstate_dt[], int& offset) {
 	
-	mIntfCurrent(0,0) = -state[offset++];
-	mIntfCurrent(1,0) = -state[offset++];
-	mIntfCurrent(2,0) = -state[offset++];
+	mIntfCurrent(0,0) = state[offset++];
+	mIntfCurrent(1,0) = state[offset++];
+	mIntfCurrent(2,0) = state[offset++];
 }

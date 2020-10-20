@@ -145,11 +145,13 @@ void EMT::Ph3::RXLoad::initializeFromNodesAndTerminals(Real frequency) {
 	// v i^T* = S
 	// v^T v i^T* = v^T S
 	// i^T*= (|v|^2)^(-1) v^T S
+	// Real v_ = pow(abs(vInitABC(0, 0)),2) + pow(abs(vInitABC(1, 0)),2) + pow(abs(vInitABC(2, 0)),2);
+	// Complex v_ = pow(vInitABC(0, 0),2) + pow(vInitABC(1, 0),2) + pow(vInitABC(2, 0),2);
+	// MatrixComp rhs_ = Complex(1, 0) / v_ * vInitABC.transpose() * mPower;
 
-	// Complex v_ = vInitABC(0, 0)*vInitABC(0, 0) + vInitABC(1, 0)*vInitABC(1, 0) + vInitABC(2, 0)*vInitABC(2, 0);
-	Real v_ = pow(abs(vInitABC(0, 0)),2) + pow(abs(vInitABC(1, 0)),2) + pow(abs(vInitABC(2, 0)),2);
-	MatrixComp rhs_ = Complex(1, 0) / v_ * vInitABC.transpose() * mPower;
-	iInitABC = rhs_.conjugate().transpose();
+	iInitABC(0, 0) = vInitABC(0, 0)/Complex(mResistance(0,0), mReactance(0,0));
+	iInitABC(1, 0) = vInitABC(1, 0)/Complex(mResistance(1,1), mReactance(1,1));
+	iInitABC(2, 0) = vInitABC(2, 0)/Complex(mResistance(2,2), mReactance(2,2));
 	mIntfCurrent = iInitABC.real();
 
 	mSLog->info(
@@ -157,28 +159,21 @@ void EMT::Ph3::RXLoad::initializeFromNodesAndTerminals(Real frequency) {
 		"\ninitialSingleVoltage: {:s}"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
-		"\nTerminal 0 voltage: {:s}"
 		"\nActive Power: {:s}"
 		"\nReactive Power: {:s}"
 		"\nResistance: {:s}"
 		"\nReactance: {:s}"
 		"\nmPower: {:s}"
-		"\nvInitABC: {:s}"
-		"\niInitABC: {:s}"
 		"\n--- Initialization from powerflow finished ---",
 		Logger::phasorToString(mTerminals[0]->initialSingleVoltage()),
 		Logger::matrixToString(mIntfVoltage),
 		Logger::matrixToString(mIntfCurrent),
-		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(0)),
 		Logger::matrixToString(mActivePower),
 		Logger::matrixToString(mReactivePower),
 		Logger::matrixToString(mResistance),
 		Logger::matrixToString(mReactance),
-		Logger::matrixCompToString(mPower),
-		Logger::matrixCompToString(vInitABC),
-		Logger::matrixCompToString(iInitABC));
+		Logger::matrixCompToString(mPower));
 	mSLog->flush();
-
 }
 
 void EMT::Ph3::RXLoad::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
@@ -259,80 +254,47 @@ void EMT::Ph3::RXLoad::daeInitialize(double time, double state[],
 
 	updateMatrixNodeIndices();
 
-	if (mReactance(0,0) > 0) {
-		// state variable is the inductor current
-		Matrix resistorCurrent = mSubResistor->intfCurrent();
-		Matrix inductorCurrent = mSubInductor->intfCurrent();
-		Matrix inductorVoltage = mSubInductor->intfVoltage();
-		state[offset] = inductorCurrent(0,0);
-		dstate_dt[offset]   = inductorVoltage(0,0)/mInductance(0,0);
-		state[offset+1] = inductorCurrent(1,0);
-		dstate_dt[offset+1] = inductorVoltage(1,0)/mInductance(1,1);
-		state[offset+2] = inductorCurrent(2,0);
-		dstate_dt[offset+2] = inductorVoltage(2,0)/mInductance(2, 2);
+	// state variable is the inductor current
+	// init current throw inductor: i_L = i-i_r
+	state[offset] = mIntfCurrent(0,0) - mIntfVoltage(0,0)/mResistance(0,0);
+	dstate_dt[offset]   = mIntfVoltage(0,0)/mInductance(0,0);
+	state[offset+1] = mIntfCurrent(1,0) - mIntfVoltage(1,0)/mResistance(1,1);
+	dstate_dt[offset+1] = mIntfVoltage(1,0)/mInductance(1,1);
+	state[offset+2] = mIntfCurrent(2,0) - mIntfVoltage(2,0)/mResistance(2,2);
+	dstate_dt[offset+2] = mIntfVoltage(2,0)/mInductance(2, 2);
 
-		mSLog->info(
-			"\n--- daeInitialize ---"
-			"\nmReactance(0,0) > 0  --> state variable are inductor currents"
-			"\nAdded current-phase1 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded current-phase2 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded current-phase3 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded derivative of current-phase1 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nAdded derivative of current-phase2 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nAdded derivative of current-phase3 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nInitial current through the resistor-ph1 of RXLoad '{:s}'={:f}A"
-			"\nInitial current through the resistor-ph2 of RXLoad '{:s}'={:f}A"
-			"\nInitial current through the resistor-ph3 of RXLoadd '{:s}'={:f}A"
-			"\n--- daeInitialize finished ---",
-			this->name(), state[offset],
-			this->name(), state[offset+1],
-			this->name(), state[offset+2],
-			this->name(), dstate_dt[offset],
-			this->name(), dstate_dt[offset+1],
-			this->name(), dstate_dt[offset+2],
-			this->name(), resistorCurrent(0,0),
-			this->name(), resistorCurrent(1,0),
-			this->name(), resistorCurrent(2,0)
-		);
-		mSLog->flush();
-	}
-	else if (mReactance(0,0) < 0) {
-		// state variable is the voltage through capacitor
-		Matrix resistorCurrent = mSubResistor->intfCurrent();
-		Matrix capacitorCurrent = mSubCapacitor->intfCurrent();
-		Matrix capacitorVoltage = mSubCapacitor->intfVoltage();
-		state[offset] = capacitorVoltage(0,0);
-		dstate_dt[offset]   = capacitorCurrent(0,0)/mCapacitance(0,0);
-		state[offset+1] = capacitorVoltage(1,0);
-		dstate_dt[offset+1] = capacitorCurrent(1,0)/mCapacitance(1,1);
-		state[offset+2] = capacitorVoltage(2,0);
-		dstate_dt[offset+2] = capacitorCurrent(2,0)/mCapacitance(2, 2);
-		
-		mSLog->info(
-			"\n--- daeInitialize ---"
-			"\nmReactance(0,0) < 0  --> state variable are capacitor currentvoltages"
-			"\nAdded voltage-phase1 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded voltage-phase2 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded voltage-phase3 through the capacitor of RXLoad '{:s}' to state vector, initial value={:f}A"
-			"\nAdded derivative of voltage-phase1 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nAdded derivative of voltage-phase2 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nAdded derivative of voltage-phase3 through the capacitor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
-			"\nInitial current through the resistor-ph1 of RXLoad '{:s}'={:f}A"
-			"\nInitial current through the resistor-ph2 of RXLoad '{:s}'={:f}A"
-			"\nInitial current through the resistor-ph3 of RXLoadd '{:s}'={:f}A"
-			"\n--- daeInitialize finished ---",
-			this->name(), state[offset],
-			this->name(), state[offset+1],
-			this->name(), state[offset+2],
-			this->name(), dstate_dt[offset],
-			this->name(), dstate_dt[offset+1],
-			this->name(), dstate_dt[offset+2],
-			this->name(), resistorCurrent(0,0),
-			this->name(), resistorCurrent(1,0),
-			this->name(), resistorCurrent(2,0)
-		);
-	}
+	mSLog->info(
+		"\n--- daeInitialize ---"
+		"\nmReactance(0,0) > 0  --> state variable are inductor currents"
+		"\nAdded current-phase1 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+		"\nAdded current-phase2 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+		"\nAdded current-phase3 through the inductor of RXLoad '{:s}' to state vector, initial value={:f}A"
+		"\nAdded derivative of current-phase1 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+		"\nAdded derivative of current-phase2 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+		"\nAdded derivative of current-phase3 through the inductor of RXLoad '{:s}' to derivative state vector, initial value={:f}"
+		"\nInitial current through the resistor-ph1 of RXLoad '{:s}'={:f}A"
+		"\nInitial current through the resistor-ph2 of RXLoad '{:s}'={:f}A"
+		"\nInitial current through the resistor-ph3 of RXLoadd '{:s}'={:f}A"
+		"\n--- daeInitialize finished ---",
+		this->name(), state[offset],
+		this->name(), state[offset+1],
+		this->name(), state[offset+2],
+		this->name(), dstate_dt[offset],
+		this->name(), dstate_dt[offset+1],
+		this->name(), dstate_dt[offset+2],
+		this->name(), mIntfVoltage(0,0)/mResistance(0,0),
+		this->name(), mIntfVoltage(1,0)/mResistance(1,1),
+		this->name(), mIntfVoltage(2,0)/mResistance(2,2)
+	);
+	mSLog->flush();
 
+	//test
+	/// get Logger of DAE Solver
+	//CPS::Logger::Log solverLog;
+	//solverLog = CPS::Logger::get(name + "_Solver")
+	//std::string name_logger = "DAE_EMT_Slack_Resistor_RXLoad_Solver";
+	//solverLog = CPS::Logger::get(name_logger, mLogLevel);
+	//solverLog->info("\ntest");
 	offset+=3;
 }
 
@@ -344,6 +306,7 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 	int pos_node1 = matrixNodeIndex(0, 0);
 	int pos_node2 = matrixNodeIndex(0, 1);
 	int pos_node3 = matrixNodeIndex(0, 2);
+
 
 	if (mReactance(0,0) > 0) {
 		resid[c_offset]   = state[pos_node1] - mInductance(0,0)*dstate_dt[c_offset];
@@ -363,14 +326,26 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 	}	
 	// else if (mReactance(0,0) == 0) {}
 	
-	/*
-	std::cout << "resid[c_offset]   (RXLOAD) = " << resid[c_offset]   << std::endl;
-	std::cout << "resid[c_offset+1] (RXLOAD) = " << resid[c_offset+1] << std::endl;
-	std::cout << "resid[c_offset+2] (RXLOAD) = " << resid[c_offset+2] << std::endl;
-	std::cout << "resid[pos_node1]  (RXLOAD) = " << resid[c_offset]   << std::endl;
-	std::cout << "resid[pos_node2]  (RXLOAD) = " << resid[c_offset+1] << std::endl;
-	std::cout << "resid[pos_node3]  (RXLOAD) = " << resid[c_offset+2] << std::endl;
-	*/
+	mSLog->info(
+		"\n\n--- NetworkInjection - SimStep = {:f} ---"
+		"\nresid[c_offset]   = state[pos_node1] - mInductance(0,0)*dstate_dt[c_offset]   = {:f} - {:f}*{:f} = {:f}"
+		"\nresid[c_offset+1] = state[pos_node2] - mInductance(1,1)*dstate_dt[c_offset+1] = {:f} - {:f}*{:f} = {:f}"
+		"\nresid[c_offset+2] = state[pos_node3] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f}*{:f} = {:f}"
+
+		"\nupdate nodal equations:"
+		"\nresid[pos_node1] += state[c_offset]   + state[pos_node1]*mConductance(0,0) = {:f} + {:f}*{:f} = {:f}"
+		"\nresid[pos_node2] += state[c_offset+1] + state[pos_node2]*mConductance(1,1) = {:f} + {:f}*{:f} = {:f}"
+		"\nresid[pos_node3] += state[c_offset+2] + state[pos_node3]*mConductance(2,2) = {:f} + {:f}*{:f} = {:f}",
+
+		sim_time,
+		state[pos_node1], mInductance(0,0), dstate_dt[c_offset], resid[c_offset],
+		state[pos_node2], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
+		state[pos_node3], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
+		state[c_offset], state[pos_node1], mConductance(0,0), resid[pos_node1],
+		state[c_offset+1], state[pos_node2], mConductance(1,1), resid[pos_node2],
+		state[c_offset+2], state[pos_node3], mConductance(2,2), resid[pos_node3]
+	);
+	mSLog->flush();
 
 	off[1] += 3;
 }
