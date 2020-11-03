@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
 	loggerEMT->addAttribute("v2", n2EMT->attribute("v"));
 	loggerEMT->addAttribute("i_slack",  slackEMT->attribute("i_intf"));
 
-	slackEMT->setInitialCurrent(rlinePF->intfCurrent().real());
+	slackEMT->setIntfCurrent(rlinePF->intfCurrent().real());
 	Simulation simEMT(simNameEMT, systemEMT, timeStepEMT, finalTimeEMT, Domain::EMT, Solver::Type::DAE);
 	simEMT.doSplitSubnets(false);
 	simEMT.addLogger(loggerEMT);

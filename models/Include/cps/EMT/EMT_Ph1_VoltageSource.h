@@ -46,10 +46,6 @@ namespace Ph1 {
 		// #### General ####
 		/// Initializes component from power flow data
 		void initializeFromNodesAndTerminals(Real frequency) { }
-		///
-		void setInitialCurrent(Complex initCurrent) { 
-			mIntfCurrent(0,0) = initCurrent.real();
-		}
 
 		// #### MNA section ####
 		/// Initializes internal variables of the component

@@ -47,11 +47,6 @@ namespace CPS {
 				// #### General ####
 				/// Initializes component from power flow data
 				void initializeFromNodesAndTerminals(Real frequency);
-				void setInitialCurrent(MatrixComp initCurrent) { 
-					mIntfCurrent(0,0) = initCurrent(0,0).real();
-					mIntfCurrent(1,0) = initCurrent(1,0).real();
-					mIntfCurrent(2,0) = initCurrent(2,0).real();
-				}
 				///
 				void setSourceValue(MatrixComp voltage);
 				///

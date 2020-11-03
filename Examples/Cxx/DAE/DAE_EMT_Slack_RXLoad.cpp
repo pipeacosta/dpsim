@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
 	logger->addAttribute("v_load",  rxLoad->attribute("v_intf"));
 	logger->addAttribute("i_load",  rxLoad->attribute("i_intf"));
 
-	slack->setInitialCurrent(initCurrent_slack);
+	slack->setIntfCurrent(initCurrent_slack);
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);

@@ -65,7 +65,9 @@ int main(int argc, char* argv[])
 	logger->addAttribute("v1", n1->attribute("v"));
 	logger->addAttribute("v2", n2->attribute("v"));
 
-	vs->setInitialCurrent(Complex(1.816,0.5782));
+	Matrix vs_initCurrent = Matrix::Zero(1, 1);
+	vs_initCurrent(0,0) = 1.816;
+	vs->setIntfCurrent(vs_initCurrent);
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);

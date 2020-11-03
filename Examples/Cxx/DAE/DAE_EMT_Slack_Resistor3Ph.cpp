@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
 	initCurrent_slack(1, 0) = initCurrent*SHIFT_TO_PHASE_B;
 	initCurrent_slack(2, 0) = initCurrent*SHIFT_TO_PHASE_C;
 
-	slack->setInitialCurrent(initCurrent_slack);
+	slack->setIntfCurrent(initCurrent_slack.real());
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);
