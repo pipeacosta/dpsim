@@ -186,7 +186,7 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 
 	this->updateVoltage(sim_time);
 	int c_offset = off[0]+off[1]; //current offset for component
-
+	
 	int pos_node1 = matrixNodeIndex(0, 0);
 	int pos_node2 = matrixNodeIndex(0, 1);
 	int pos_node3 = matrixNodeIndex(0, 2);
@@ -206,9 +206,9 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 		"\nresid[c_offset+2] = state[pos_node3] - mIntfVoltage(2,0) = {:f} - {:f} = {:f}"
 
 		"\nupdate nodal equations:"
-		"\resid[pos_node1] -= state[c_offset]   --> resid[pos_node1] -= {:f}"
-		"\resid[pos_node2] -= state[c_offset+1] --> resid[pos_node2] -= {:f}"
-		"\resid[pos_node3] -= state[c_offset+2] --> resid[pos_node3] -= {:f}",
+		"\nresid[pos_node1] -= state[c_offset]   --> resid[pos_node1] -= {:f}"
+		"\nresid[pos_node2] -= state[c_offset+1] --> resid[pos_node2] -= {:f}"
+		"\nresid[pos_node3] -= state[c_offset+2] --> resid[pos_node3] -= {:f}",
 
 		sim_time,
 		state[pos_node1], mIntfVoltage(0,0), resid[c_offset],

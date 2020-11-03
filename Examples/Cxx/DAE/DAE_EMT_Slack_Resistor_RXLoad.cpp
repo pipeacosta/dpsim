@@ -22,92 +22,142 @@
 #include <DPsim.h>
 
 using namespace DPsim;
-using namespace CPS::EMT;
-using namespace CPS::EMT::Ph3;
+using namespace CPS;
+using namespace CPS::CIM;
 
-#define SHIFT_TO_PHASE_B Complex(cos(-2 * M_PI / 3), sin(-2 * M_PI / 3))
-#define SHIFT_TO_PHASE_C Complex(cos(2 * M_PI / 3), sin(2 * M_PI / 3))
-#define RMS3PH_TO_PEAK1PH sqrt(2./3.)
-#define PEAK1PH_TO_RMS3PH sqrt(3./2.)
-#define SQRT2 sqrt(2.)
-
-int main(int argc, char* argv[])
-{
-	Real timeStep = 0.0001;
-	Real finalTime = 0.1;
-	String simName = "DAE_EMT_Slack_Resistor_RXLoad";
-	Logger::setLogDir("logs/" + simName);
-
-	// Slack
-	auto slack = NetworkInjection::make("slack", Logger::Level::info);
-	MatrixComp voltageRef_slack = MatrixComp::Zero(3, 1);
-	voltageRef_slack(0, 0) = Complex(110e3, 0);
-	voltageRef_slack(1, 0) = Complex(110e3, 0)*SHIFT_TO_PHASE_B;
-	voltageRef_slack(2, 0) = Complex(110e3, 0)*SHIFT_TO_PHASE_C;
-	slack->setParameters(voltageRef_slack, 50);
-
-	// Resistor
-	auto resistor = Resistor::make("Resistor", Logger::Level::info);
-	Matrix resistor_param = Matrix::Zero(3, 3);
-	resistor_param <<
-		20, 0, 0,
-		0, 20, 0,
-		0, 0, 20;
-	resistor->setParameters(resistor_param);
-
-	// RXLoad
+int main(int argc, char* argv[]) {
+	// Parameters
+	Real frequency = 50;
+	Real Vnom = 110e3;
+	Matrix rline_param = Matrix::Zero(3, 3);
+	rline_param <<
+		20., 0, 0,
+		0, 20., 0,
+		0, 0, 20.;
+	Real pLoadNom = 0.5e6;
+	Real qLoadNom = 0.5e6;
+	Real r_load = std::pow(Vnom/sqrt(3), 2) * (1/pLoadNom);
+	Real i_load = std::pow(Vnom/sqrt(3), 2) * (1/qLoadNom) / (2 * PI * frequency);
 	Matrix p_load = Matrix::Zero(3, 3);
 	p_load <<
-		0.5e6, 0, 0,
-		0, 0.5e6, 0,
-		0, 0, 0.5e6;
+		pLoadNom, 0, 0,
+		0, pLoadNom, 0,
+		0, 0, pLoadNom;
 	Matrix q_load = Matrix::Zero(3, 3);
 	q_load <<
-		0.5e6, 0, 0,
-		0, 0.5e6, 0,
-		0, 0, 0.5e6;
-	auto rxLoad = RXLoad::make("rxLoad", p_load, q_load, 110e3, Logger::Level::info);
+		qLoadNom, 0, 0,
+		0, qLoadNom, 0,
+		0, 0, qLoadNom;
+	Matrix rloadPF_param = Matrix::Zero(3, 3);
+	rloadPF_param <<
+		r_load, 0, 0,
+		0, r_load, 0,
+		0, 0, r_load;
+	Matrix iload_param = Matrix::Zero(3, 3);
+	iload_param <<
+		i_load, 0, 0,
+		0, i_load, 0,
+		0, 0, i_load;
 
-	// Node1
-	std::vector<Complex> initialVoltage_n1{ voltageRef_slack(0, 0), 
-											voltageRef_slack(1, 0),
-											voltageRef_slack(2, 0)
-										  };
-	auto n1 = SimNode::make("n1", PhaseType::ABC, initialVoltage_n1);
-	
-	// Node2
-	Complex init_v2 = Complex(109863.6368, 136.0259582);
-	std::vector<Complex> initialVoltage_n2{ init_v2, 
-											init_v2*SHIFT_TO_PHASE_B,
-											init_v2*SHIFT_TO_PHASE_C
-										  };
-	auto n2 = SimNode::make("n2", PhaseType::ABC, initialVoltage_n2);
+
+	// ----- POWERFLOW FOR INITIALIZATION -----
+	Real timeStepPF = 0.0001;
+	Real finalTimePF = 0.0001;
+	String simNamePF = "SP_Ph3_Slack_RLine_RXLoad_Init";
+	Logger::setLogDir("logs/" + simNamePF);
+
+	// Nodes
+	auto n1PF = SimNode<Complex>::make("n1PF", PhaseType::ABC);
+	auto n2PF = SimNode<Complex>::make("n2PF", PhaseType::ABC);
+
+	// Components
+	// voltage source
+	auto vsPF = SP::Ph3::VoltageSource::make("vsPF");
+	vsPF->setParameters(Vnom*RMS3PH_TO_PEAK1PH);
+    
+	// RLine
+	auto rlinePF = SP::Ph3::Resistor::make("rlinePF");
+	rlinePF->setParameters(rline_param);
+
+	// RXLoad
+    auto rloadPF = SP::Ph3::Resistor::make("rloadPF");
+	rloadPF->setParameters(rloadPF_param);
+	auto iloadPF = SP::Ph3::Inductor::make("iloadPF");
+	iloadPF->setParameters(iload_param);
 
 	// Topology
-	slack->connect(SimNode::List{ n1 });
-	resistor->connect(SimNode::List{ n2, n1 });
-	rxLoad->connect(SimNode::List{ n2 });
+	vsPF->connect({SimNode<Complex>::GND, n1PF});
+	rlinePF->connect({n2PF, n1PF});
+	rloadPF->connect({ SimNode<Complex>::GND, n2PF });
+	iloadPF->connect({ SimNode<Complex>::GND, n2PF });
 
-	// Define system topology
-	auto sys = SystemTopology(50, SystemNodeList{n1, n2}, SystemComponentList{slack, resistor, rxLoad});
+	auto systemPF  = SystemTopology(frequency, SystemNodeList{ n1PF, n2PF}, SystemComponentList{ vsPF, rlinePF, rloadPF, iloadPF});
+
+	// Logging
+	auto loggerPF  = DataLogger::make(simNamePF);
+	loggerPF->addAttribute("v1", n1PF->attribute("v"));
+	loggerPF ->addAttribute("v2", n2PF->attribute("v"));
+	loggerPF ->addAttribute("i_slack", rlinePF->attribute("i_intf"));
+
+	Simulation simPF(simNamePF, Logger::Level::info);
+	simPF.setSystem(systemPF);
+	simPF.addLogger(loggerPF);
+	simPF.setDomain(Domain::SP);
+	simPF.setTimeStep(timeStepPF);
+	simPF.setFinalTime(finalTimePF);
+	simPF.run();
+
+
+	// ----- DYNAMIC SIMULATION -----
+	Real timeStepEMT  = 0.0001;
+	Real finalTimeEMT = 0.1;
+	String simNameEMT = "DAE_EMT_Slack_RLine_RXLoad_PF_Init";
+	Logger::setLogDir("logs/" + simNameEMT);
+
+	// Nodes
+	std::vector<Complex> initialVoltage_n1{ n1PF->voltage()(0,0).real()*PEAK1PH_TO_RMS3PH, 
+											n1PF->voltage()(1,0).real()*PEAK1PH_TO_RMS3PH,
+											n1PF->voltage()(2,0).real()*PEAK1PH_TO_RMS3PH
+										  };
+	auto n1EMT = SimNode<Real>::make("n1EMT", PhaseType::ABC, initialVoltage_n1);
+	std::vector<Complex> initialVoltage_n2{ n2PF->voltage()(0,0).real()*PEAK1PH_TO_RMS3PH, 
+											n2PF->voltage()(1,0).real()*PEAK1PH_TO_RMS3PH,
+											n2PF->voltage()(2,0).real()*PEAK1PH_TO_RMS3PH
+										  };
+	auto n2EMT = SimNode<Real>::make("n2EMT", PhaseType::ABC, initialVoltage_n2);
+
+	// Slack
+	auto slackEMT = EMT::Ph3::NetworkInjection::make("slackEMT", Logger::Level::info);
+	MatrixComp voltageRef_slackEMT = MatrixComp::Zero(3, 1);
+	voltageRef_slackEMT(0, 0) = Complex(Vnom, 0);
+	voltageRef_slackEMT(1, 0) = Complex(Vnom, 0)*SHIFT_TO_PHASE_B;
+	voltageRef_slackEMT(2, 0) = Complex(Vnom, 0)*SHIFT_TO_PHASE_C;
+	slackEMT->setParameters(voltageRef_slackEMT, frequency);
+
+	// Resistor
+	auto resistorEMT = EMT::Ph3::Resistor::make("ResistorEMT", Logger::Level::info);
+	resistorEMT->setParameters(rline_param);
+
+	// RXLoad
+	auto rxLoadEMT = EMT::Ph3::RXLoad::make("rxLoadEMT", p_load, q_load, 110e3, Logger::Level::info);
+
+	// Topology
+	slackEMT->connect({ n1EMT });
+	resistorEMT->connect({ n2EMT, n1EMT });
+	rxLoadEMT->connect({ n2EMT });
+	auto systemEMT = SystemTopology(frequency, SystemNodeList{n1EMT, n2EMT}, SystemComponentList{slackEMT, resistorEMT, rxLoadEMT});
 
 	// Logger
-	auto logger = DataLogger::make(simName);
-	logger->addAttribute("v1", n1->attribute("v"));
-	logger->addAttribute("v2", n1->attribute("v"));
-	logger->addAttribute("i_slack",  slack->attribute("i_intf"));
+	auto loggerEMT = DataLogger::make(simNameEMT);
+	loggerEMT->addAttribute("v1", n1EMT->attribute("v"));
+	loggerEMT->addAttribute("v2", n2EMT->attribute("v"));
+	loggerEMT->addAttribute("i_slack",  slackEMT->attribute("i_intf"));
 
-	MatrixComp initCurrent_slack = MatrixComp::Zero(3, 1);
-	Complex initCurrent = Complex(5.567004844, -5.55323649);
-	initCurrent_slack(0, 0) = initCurrent;
-	initCurrent_slack(1, 0) = initCurrent*SHIFT_TO_PHASE_B;
-	initCurrent_slack(2, 0) = initCurrent*SHIFT_TO_PHASE_C;
-
-	slack->setInitialCurrent(initCurrent_slack);
-	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
-	sim.doSplitSubnets(false);
-	sim.addLogger(logger);
-	sim.run();
+	slackEMT->setInitialCurrent(rlinePF->intfCurrent().real());
+	Simulation simEMT(simNameEMT, systemEMT, timeStepEMT, finalTimeEMT, Domain::EMT, Solver::Type::DAE);
+	simEMT.doSplitSubnets(false);
+	simEMT.addLogger(loggerEMT);
+	simEMT.run();
 
 	return 0;
 }

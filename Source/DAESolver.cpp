@@ -170,8 +170,8 @@ void DAESolver<VarType>::initialize(Real t0) {
     }
 
     // Set relative tolerance and absolute error
-    mRelativeTolerance = RCONST(1e-1); // Set relative tolerance  1e-4 = 0.01%
-    mAbsoluteTolerance = RCONST(1e-1); // Set absolute error
+    mRelativeTolerance = RCONST(1e-4); // Set relative tolerance  1e-4 = 0.01%
+    mAbsoluteTolerance = RCONST(1e-2); // Set absolute error
 
     // creates the IDA solver memory block
     mIDAMemoryBlock = IDACreate();
@@ -239,7 +239,7 @@ void DAESolver<VarType>::initialize(Real t0) {
     	throw CPS::Exception();
 	}
     */
-
+  
     //Optional IDA input functions
     /*
     ret = IDASetMaxNumSteps(mIDAMemoryBlock, 50000);  //Max. number of timesteps until tout (-1 = unlimited)
@@ -263,7 +263,7 @@ int DAESolver<VarType>::residualFunction(realtype step_time,
     N_Vector state, N_Vector dstate_dt, N_Vector resid)
 {
     // Reset Offset of nodes
-    mOffsets[0] =0;
+    mOffsets[0]=0;
     for (auto node : mNodes) {
         if (node->phaseType() == PhaseType::Single) {
             mOffsets[0] +=1;
@@ -294,7 +294,10 @@ int DAESolver<VarType>::residualFunction(realtype step_time,
 template <typename VarType>
 Real DAESolver<VarType>::step(Real time) {
     realtype NextTime = (realtype) time+mTimestep;
-       
+
+    realtype *sval = NULL;
+    sval  = N_VGetArrayPointer(mStateVector);
+    mSLog->info("\n\n--- test state[9] = {:f} ---", sval[9]);
     int ret = IDASolve(mIDAMemoryBlock, NextTime, &mTimeReachedSolver, mStateVector, mDerivativeStateVector, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
     if (ret != IDA_SUCCESS) {
         mSLog->info("Ida Error: {}", ret);
@@ -309,7 +312,7 @@ Real DAESolver<VarType>::step(Real time) {
     } 
 
     //update node voltages
-    realtype *sval = NULL;
+    //realtype *sval = NULL;
     realtype *dstate_val = NULL;
     sval  = N_VGetArrayPointer(mStateVector);
     dstate_val  = N_VGetArrayPointer(mDerivativeStateVector);
@@ -330,7 +333,6 @@ Real DAESolver<VarType>::step(Real time) {
             mOffsets[0] +=1;
         }
     }
-    mOffsets[1] = 0;    // Reset Offset of componentes
 
     //update components
     mOffsets[1] = mOffsets[0];      // Reset Offset of componentes

@@ -10,6 +10,7 @@
 
 #include<vector>
 #include <cps/Definitions.h>
+#include <cps/Logger.h>
 
 namespace CPS {
 	class DAEInterface {
@@ -20,7 +21,7 @@ namespace CPS {
 		using ResFn = std::function<void(double, const double *, const double *, double *, std::vector<int>&)>;
 
 		// #### DAE Section ####
-		
+
 		///
 		virtual void daeInitialize(double time, double state[], double dstate_dt[], int& counter)=0;
 		// virtual Complex daeInitialize()=0;
