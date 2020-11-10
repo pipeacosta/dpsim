@@ -112,7 +112,7 @@ namespace Ph3 {
 		///Residual Function for DAE Solver
 		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///
-		void daePostStep(const double state[], const double dstate_dt[], int& counter);
+		void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter);
 		///
 		int getNumberOfStateVariables() {return 3;}
 	};

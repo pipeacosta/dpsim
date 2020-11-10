@@ -58,6 +58,7 @@ void EMT::Ph3::Capacitor::initializeFromNodesAndTerminals(Real frequency) {
 		Logger::matrixToString(mIntfCurrent),
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(0)),
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)));
+	mSLog->flush();
 }
 
 void EMT::Ph3::Capacitor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {

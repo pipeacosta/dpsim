@@ -389,7 +389,7 @@ void EMT::Ph3::PiLine::daeResidual(double sim_time,
 	off[1] += 3;
 }
 
-void EMT::Ph3::PiLine::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph3::PiLine::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
 	int pos_node1a = matrixNodeIndex(0, 0);
 	int pos_node1b = matrixNodeIndex(0, 1);
 	int pos_node1c = matrixNodeIndex(0, 2);

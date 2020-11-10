@@ -151,7 +151,7 @@ void EMT::Ph1::Capacitor::daeResidual(double sim_time,
 	off[1] += 1;
 }
 
-void EMT::Ph1::Capacitor::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph1::Capacitor::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
 	mIntfCurrent(0,0) = mCapacitance*dstate_dt[offset];
 	mIntfVoltage(0,0) = state[offset];
 	offset++;

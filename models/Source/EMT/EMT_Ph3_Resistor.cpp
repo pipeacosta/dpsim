@@ -222,7 +222,7 @@ void EMT::Ph3::Resistor::daeResidual(double time,
 }
 
 ///
-void EMT::Ph3::Resistor::daePostStep(const double state[], const double dstate_dt[], int& counter) {
+void EMT::Ph3::Resistor::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter) {
 	mIntfVoltage(0, 0) = 0.0;
 	mIntfVoltage(1, 0) = 0.0;
 	mIntfVoltage(2, 0) = 0.0;

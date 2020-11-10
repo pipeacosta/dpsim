@@ -267,11 +267,11 @@ void EMT::Ph3::RXLoad::daeInitialize(double time, double state[],
 
 	// state variable is the inductor current
 	// init current throw inductor: i_L = i-i_r
-	state[offset] = mIntfCurrent(0,0) - mIntfVoltage(0,0)/mResistance(0,0);
+	state[offset] = mIntfCurrent(0,0) - mIntfVoltage(0,0)*mConductance(0,0);
 	dstate_dt[offset]   = mIntfVoltage(0,0)/mInductance(0,0);
-	state[offset+1] = mIntfCurrent(1,0) - mIntfVoltage(1,0)/mResistance(1,1);
+	state[offset+1] = mIntfCurrent(1,0) - mIntfVoltage(1,0)*mConductance(1,1);
 	dstate_dt[offset+1] = mIntfVoltage(1,0)/mInductance(1,1);
-	state[offset+2] = mIntfCurrent(2,0) - mIntfVoltage(2,0)/mResistance(2,2);
+	state[offset+2] = mIntfCurrent(2,0) - mIntfVoltage(2,0)*mConductance(2,2);
 	dstate_dt[offset+2] = mIntfVoltage(2,0)/mInductance(2, 2);
 
 	mSLog->info(
@@ -293,9 +293,9 @@ void EMT::Ph3::RXLoad::daeInitialize(double time, double state[],
 		this->name(), dstate_dt[offset],
 		this->name(), dstate_dt[offset+1],
 		this->name(), dstate_dt[offset+2],
-		this->name(), mIntfVoltage(0,0)/mResistance(0,0),
-		this->name(), mIntfVoltage(1,0)/mResistance(1,1),
-		this->name(), mIntfVoltage(2,0)/mResistance(2,2)
+		this->name(), mIntfVoltage(0,0)*mConductance(0,0),
+		this->name(), mIntfVoltage(1,0)*mConductance(1,1),
+		this->name(), mIntfVoltage(2,0)*mConductance(2,2)
 	);
 	mSLog->flush();
 }
@@ -309,23 +309,21 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 	int pos_node2 = matrixNodeIndex(0, 1);
 	int pos_node3 = matrixNodeIndex(0, 2);
 
-	mSLog->info(
-		"\n\n--- state[c_offset] = {:f} ---", state[c_offset]);
 	if (mReactance(0,0) > 0) {
-		resid[c_offset]   = state[pos_node1] - mInductance(0,0)*dstate_dt[c_offset];
-		resid[c_offset+1] = state[pos_node2] - mInductance(1,1)*dstate_dt[c_offset+1];
-		resid[c_offset+2] = state[pos_node3] - mInductance(2,2)*dstate_dt[c_offset+2];
-		resid[pos_node1] += state[c_offset]   + state[pos_node1]/mResistance(0,0);
-		resid[pos_node2] += state[c_offset+1] + state[pos_node2]/mResistance(1,1);
-		resid[pos_node3] += state[c_offset+2] + state[pos_node3]/mResistance(2,2);
+		resid[c_offset]   = state[pos_node1]  - mInductance(0,0)*dstate_dt[c_offset];
+		resid[c_offset+1] = state[pos_node2]  - mInductance(1,1)*dstate_dt[c_offset+1];
+		resid[c_offset+2] = state[pos_node3]  - mInductance(2,2)*dstate_dt[c_offset+2];
+		resid[pos_node1] += state[c_offset]   + state[pos_node1]*mConductance(0,0);
+		resid[pos_node2] += state[c_offset+1] + state[pos_node2]*mConductance(1,1);
+		resid[pos_node3] += state[c_offset+2] + state[pos_node3]*mConductance(2,2);
 	}
 	else if (mReactance(0,0) < 0) {
 		resid[c_offset]   = state[pos_node1] - state[c_offset];
 		resid[c_offset+1] = state[pos_node2] - state[c_offset+1];
 		resid[c_offset+2] = state[pos_node3] - state[c_offset+2];
-		resid[pos_node1] += mCapacitance(0,0)*dstate_dt[c_offset]   + state[pos_node1]/mResistance(0,0);
-		resid[pos_node2] += mCapacitance(1,1)*dstate_dt[c_offset+1] + state[pos_node2]/mResistance(1,1);
-		resid[pos_node3] += mCapacitance(2,2)*dstate_dt[c_offset+2] + state[pos_node3]/mResistance(2,2);
+		resid[pos_node1] += mCapacitance(0,0)*dstate_dt[c_offset]   + state[pos_node1]*mConductance(0,0);
+		resid[pos_node2] += mCapacitance(1,1)*dstate_dt[c_offset+1] + state[pos_node2]*mConductance(1,1);
+		resid[pos_node3] += mCapacitance(2,2)*dstate_dt[c_offset+2] + state[pos_node3]*mConductance(2,2);
 	}	
 	// else if (mReactance(0,0) == 0) {}
 	
@@ -336,38 +334,38 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 		"\nresid[c_offset+2] = state[pos_node3] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f}*{:f} = {:f}"
 
 		"\nupdate nodal equations:"
-		"\nresid[pos_node1] += state[c_offset]   + state[pos_node1]/mResistance(0,0) = {:f} + {:f}/{:f} = {:f}"
-		"\nresid[pos_node2] += state[c_offset+1] + state[pos_node2]/mResistance(1,1) = {:f} + {:f}/{:f} = {:f}"
-		"\nresid[pos_node3] += state[c_offset+2] + state[pos_node3]/mResistance(2,2) = {:f} + {:f}/{:f} = {:f}",
+		"\nresid[pos_node1] += state[c_offset]   + state[pos_node1]*mConductance(0,0) = {:f} + {:f}*{:f} = {:f}"
+		"\nresid[pos_node2] += state[c_offset+1] + state[pos_node2]*mConductance(1,1) = {:f} + {:f}*{:f} = {:f}"
+		"\nresid[pos_node3] += state[c_offset+2] + state[pos_node3]*mConductance(2,2) = {:f} + {:f}*{:f} = {:f}",
 
 		sim_time,
 		state[pos_node1], mInductance(0,0), dstate_dt[c_offset], resid[c_offset],
 		state[pos_node2], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
 		state[pos_node3], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
-		state[c_offset], state[pos_node1], mResistance(0,0), resid[pos_node1],
-		state[c_offset+1], state[pos_node2], mResistance(1,1), resid[pos_node2],
-		state[c_offset+2], state[pos_node3], mResistance(2,2), resid[pos_node3]
+		state[c_offset], state[pos_node1], mConductance(0,0), resid[pos_node1],
+		state[c_offset+1], state[pos_node2], mConductance(1,1), resid[pos_node2],
+		state[c_offset+2], state[pos_node3], mConductance(2,2), resid[pos_node3]
 	);
-	mSLog->flush();
+	//mSLog->flush();
 
 	off[1] += 3;
 }
 
-void EMT::Ph3::RXLoad::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph3::RXLoad::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
 	mIntfVoltage(0, 0) = state[matrixNodeIndex(0, 0)];
 	mIntfVoltage(1, 0) = state[matrixNodeIndex(0, 1)];
 	mIntfVoltage(2, 0) = state[matrixNodeIndex(0, 2)];
 
 	if (mReactance(0,0) > 0) {
-		mIntfCurrent(0, 0) = state[offset] + state[matrixNodeIndex(0, 0)]/mResistance(0,0);
-		mIntfCurrent(1, 0) = state[offset+1] + state[matrixNodeIndex(0, 1)]/mResistance(1,1);
-		mIntfCurrent(2, 0) = state[offset+2] + state[matrixNodeIndex(0, 2)]/mResistance(2,2);
+		mIntfCurrent(0, 0) = state[offset] + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
+		mIntfCurrent(1, 0) = state[offset+1] + state[matrixNodeIndex(0, 1)]*mConductance(1,1);
+		mIntfCurrent(2, 0) = state[offset+2] + state[matrixNodeIndex(0, 2)]*mConductance(2,2);
 	}
 	else if (mReactance(0,0) < 0)
 	{
-		mIntfCurrent(0, 0) = mCapacitance(0,0)*dstate_dt[offset] + state[matrixNodeIndex(0, 0)]/mResistance(0,0);
-		mIntfCurrent(1, 0) = mCapacitance(1,1)*dstate_dt[offset+1] + state[matrixNodeIndex(0, 1)]/mResistance(1,1);
-		mIntfCurrent(2, 0) = mCapacitance(2,2)*dstate_dt[offset+2] + state[matrixNodeIndex(0, 2)]/mResistance(2,2);
+		mIntfCurrent(0, 0) = mCapacitance(0,0)*dstate_dt[offset] + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
+		mIntfCurrent(1, 0) = mCapacitance(1,1)*dstate_dt[offset+1] + state[matrixNodeIndex(0, 1)]*mConductance(1,1);
+		mIntfCurrent(2, 0) = mCapacitance(2,2)*dstate_dt[offset+2] + state[matrixNodeIndex(0, 2)]*mConductance(2,2);
 	}
 	//else (mReactance==0.0) {}
 	offset+=3;

@@ -94,23 +94,13 @@ void EMT::Ph1::VoltageSource::mnaUpdateCurrent(const Matrix& leftVector) {
 
 // #### DAE functions ####
 
-void EMT::Ph1::VoltageSource::daeUpdateVoltage(Real time) {
-	mVoltageRef = attribute<Complex>("V_ref");
-	mSrcFreq = attribute<Real>("f_src");
-	Complex voltageRef = mVoltageRef->get();
-	Real srcFreq = mSrcFreq->get();
-	if (srcFreq > 0)
-		mIntfVoltage(0,0) = Math::abs(voltageRef) * cos(time * 2.*PI*srcFreq + Math::phase(voltageRef));
-	else
-		mIntfVoltage(0,0) = voltageRef.real();
-}
-
 void EMT::Ph1::VoltageSource::daeInitialize(double time, double state[], double dstate_dt[], int& offset) {
 	// offset: number of component in state, dstate_dt
 	// state[offset] = current through voltage source flowing into node matrixNodeIndex(1)
 	// dstate_dt[offset] = derivative of current through voltage source  (not used yed)
 
 	updateMatrixNodeIndices();
+	this->updateVoltage(time);
 	state[offset] = mIntfCurrent(0,0);
 	dstate_dt[offset] = 0.0;
 	mSLog->info(
@@ -121,6 +111,7 @@ void EMT::Ph1::VoltageSource::daeInitialize(double time, double state[], double 
 		this->name(), state[offset],
 		this->name(), dstate_dt[offset]
 	);
+	mSLog->flush();
 	offset++;
 }
 
@@ -133,8 +124,6 @@ void EMT::Ph1::VoltageSource::daeResidual(double sim_time,
 	// resid[Pos1] = nodal current equation of node matrixNodeIndex(0)
 	// resid[Pos2] = nodal current equation of node matrixNodeIndex(1)
 
-	//this->daeUpdateVoltage(sim_time);
-	this->updateVoltage(sim_time);
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	int c_offset = off[0]+off[1]; //current offset for component
@@ -151,7 +140,10 @@ void EMT::Ph1::VoltageSource::daeResidual(double sim_time,
 	off[1] += 1;
 }
 
-void EMT::Ph1::VoltageSource::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph1::VoltageSource::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
+	this->updateVoltage(Nexttime);
+	//int Pos1 = matrixNodeIndex(1);
+	//mIntfVoltage(0,0) = state[Pos1];
 	mIntfCurrent(0,0) = state[offset];
 	offset++;
 }

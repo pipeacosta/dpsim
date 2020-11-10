@@ -29,13 +29,24 @@ int main(int argc, char* argv[]) {
 	// Parameters
 	Real frequency = 50;
 	Real Vnom = 110e3;
+	//Real Vnom = 110;
 	Matrix rline_param = Matrix::Zero(3, 3);
+	///*
 	rline_param <<
 		20., 0, 0,
 		0, 20., 0,
 		0, 0, 20.;
+	//	*/
+	/*
+	rline_param <<
+		2., 0, 0,
+		0, 2., 0,
+		0, 0, 2.;	
+	*/
 	Real pLoadNom = 0.5e6;
 	Real qLoadNom = 0.5e6;
+	//Real pLoadNom = 10000;
+	//Real qLoadNom = 10000;
 	Real r_load = std::pow(Vnom/sqrt(3), 2) * (1/pLoadNom);
 	Real i_load = std::pow(Vnom/sqrt(3), 2) * (1/qLoadNom) / (2 * PI * frequency);
 	Matrix p_load = Matrix::Zero(3, 3);
@@ -61,8 +72,8 @@ int main(int argc, char* argv[]) {
 
 
 	// ----- POWERFLOW FOR INITIALIZATION -----
-	Real timeStepPF = 0.0001;
-	Real finalTimePF = 0.0001;
+	Real timeStepPF = 0.001;
+	Real finalTimePF = 0.1;
 	String simNamePF = "SP_Ph3_Slack_RLine_RXLoad_Init";
 	Logger::setLogDir("logs/" + simNamePF);
 
@@ -74,7 +85,8 @@ int main(int argc, char* argv[]) {
 	// voltage source
 	auto vsPF = SP::Ph3::VoltageSource::make("vsPF");
 	vsPF->setParameters(Vnom*RMS3PH_TO_PEAK1PH);
-    
+    //vsPF->setParameters(Vnom);
+
 	// RLine
 	auto rlinePF = SP::Ph3::Resistor::make("rlinePF");
 	rlinePF->setParameters(rline_param);
@@ -98,6 +110,7 @@ int main(int argc, char* argv[]) {
 	loggerPF->addAttribute("v1", n1PF->attribute("v"));
 	loggerPF ->addAttribute("v2", n2PF->attribute("v"));
 	loggerPF ->addAttribute("i_slack", rlinePF->attribute("i_intf"));
+	loggerPF ->addAttribute("i_line", rlinePF->attribute("i_intf"));
 
 	Simulation simPF(simNamePF, Logger::Level::info);
 	simPF.setSystem(systemPF);
@@ -106,7 +119,6 @@ int main(int argc, char* argv[]) {
 	simPF.setTimeStep(timeStepPF);
 	simPF.setFinalTime(finalTimePF);
 	simPF.run();
-
 
 	// ----- DYNAMIC SIMULATION -----
 	Real timeStepEMT  = 0.0001;
@@ -139,7 +151,7 @@ int main(int argc, char* argv[]) {
 	resistorEMT->setParameters(rline_param);
 
 	// RXLoad
-	auto rxLoadEMT = EMT::Ph3::RXLoad::make("rxLoadEMT", p_load, q_load, 110e3, Logger::Level::info);
+	auto rxLoadEMT = EMT::Ph3::RXLoad::make("rxLoadEMT", p_load, q_load, Vnom, Logger::Level::info);
 
 	// Topology
 	slackEMT->connect({ n1EMT });

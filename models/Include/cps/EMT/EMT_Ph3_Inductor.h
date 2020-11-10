@@ -10,6 +10,7 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
+#include <cps/Solver/DAEInterface.h>
 #include <cps/Base/Base_Ph3_Inductor.h>
 
 namespace CPS {
@@ -25,6 +26,7 @@ namespace CPS {
 			class Inductor :
 				public Base::Ph3::Inductor,
 				public MNAInterface,
+				public DAEInterface,
 				public SimPowerComp<Real>,
 				public SharedFactory<Inductor> {
 			protected:
@@ -88,6 +90,16 @@ namespace CPS {
 					Inductor& mInductor;
 					Attribute<Matrix>::Ptr mLeftVector;
 				};
+
+				// #### DAE Section ####
+				/// 
+				void daeInitialize(double time, double state[], double dstate_dt[], int& counter);
+				/// Residual Function for DAE Solver
+				void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
+				///
+				void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter);
+				/// 
+				int getNumberOfStateVariables() {return 3;}
 			};
 		}
 	}

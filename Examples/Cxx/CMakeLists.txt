@@ -82,11 +82,12 @@ if(WITH_SUNDIALS)
 		DAE/DAE_EMT_RL1.cpp
 		DAE/DAE_EMT_RC1.cpp
 		DAE/DAE_EMT_RLC1.cpp
-		DAE/DAE_EMT_Slack_Resistor3Ph.cpp
 		DAE/DAE_EMT_Slack_RXLoad.cpp
 		DAE/DAE_EMT_Slack_Resistor_RXLoad.cpp
 		DAE/DAE_EMT_Slack_PiLine_RXLoad.cpp
-		DAE/MNA_EMT_Slack_PiLine_RXLoad.cpp
+		DAE/DAE_EMT_R1.cpp
+		DAE/DAE_EMT_Ph3_Slack_Resistor.cpp
+		DAE/DAE_EMT_Ph3_Slack_RL1.cpp
 	)
 endif()
 

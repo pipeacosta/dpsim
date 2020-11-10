@@ -28,31 +28,27 @@ using namespace CPS::EMT::Ph1;
 int main(int argc, char* argv[])
 {
 	Real timeStep = 0.001;
-	Real finalTime = 3;
-	String simName = "DAE_EMT_VS_RC1";
+	Real finalTime = 0.1;
+	String simName = "DAE_EMT_VS_R1";
 	Logger::setLogDir("logs/"+simName);
 
 	// Nodes
 	std::vector<Complex> initialVoltage_n1{ Complex(10,0), 0, 0 };
-    std::vector<Complex> initialVoltage_n2{ Complex(0.92, -2.89), 0, 0 };
 	auto n1 = SimNode::make("n1", PhaseType::Single, initialVoltage_n1);
-	auto n2 = SimNode::make("n2", PhaseType::Single, initialVoltage_n2);
 
 	// Components
 	auto vs = VoltageSource::make("vs", Logger::Level::info);
 	vs->setParameters(Complex(10, 0), 50);
 	auto r1 = Resistor::make("r_1");
-	r1->setParameters(5);
-	auto c1 = Capacitor::make("c_1", Logger::Level::info);
-	c1->setParameters(0.002);
+	r1->setParameters(10);
+
 
 	// Topology
 	vs->connect(SimNode::List{ SimNode::GND, n1 });
-	r1->connect(SimNode::List{ n2, n1 });
-	c1->connect(SimNode::List{ SimNode::GND, n2 });
+	r1->connect(SimNode::List{ SimNode::GND, n1 });
 
 	// Define system topology
-	auto sys = SystemTopology(50, SystemNodeList{n1, n2}, SystemComponentList{vs, r1, c1});
+	auto sys = SystemTopology(50, SystemNodeList{n1}, SystemComponentList{vs, r1});
 
 	// Logger
 	auto logger = DataLogger::make(simName);
@@ -60,13 +56,10 @@ int main(int argc, char* argv[])
 	logger->addAttribute("i_vs", vs->attribute("i_intf"));
 	logger->addAttribute("vr", r1->attribute("v_intf"));
 	logger->addAttribute("i_r", r1->attribute("i_intf"));
-	logger->addAttribute("v_c1", c1->attribute("v_intf"));
-	logger->addAttribute("i_c1", c1->attribute("i_intf"));
 	logger->addAttribute("v1", n1->attribute("v"));
-	logger->addAttribute("v2", n2->attribute("v"));
 
 	Matrix vs_initCurrent = Matrix::Zero(1, 1);
-	vs_initCurrent(0,0) = 1.816;
+	vs_initCurrent(0,0) = 1.0;
 	vs->setIntfCurrent(vs_initCurrent);
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);

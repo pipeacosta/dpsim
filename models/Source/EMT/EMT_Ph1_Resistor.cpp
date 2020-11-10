@@ -134,7 +134,7 @@ void EMT::Ph1::Resistor::daeResidual(double sim_time,
 	}
 }
 
-void EMT::Ph1::Resistor::daePostStep(const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph1::Resistor::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
 	int Pos1 = matrixNodeIndex(0);
     int Pos2 = matrixNodeIndex(1);
 	mIntfVoltage(0,0) = 0.0;

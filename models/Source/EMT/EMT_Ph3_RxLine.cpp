@@ -153,3 +153,18 @@ void EMT::Ph3::RxLine::mnaUpdateVoltage(const Matrix& leftVector) {
 void EMT::Ph3::RxLine::mnaUpdateCurrent(const Matrix& leftVector) {
 	mIntfCurrent = mSubInductor->intfCurrent();
 }
+
+
+
+// #### DAE Section ####
+/// TODO...
+void EMT::Ph3::RxLine::daeInitialize(double time, double state[], double dstate_dt[], int& counter){
+}
+
+///Residual Function for DAE Solver
+void EMT::Ph3::RxLine::daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off){
+}
+
+///
+void EMT::Ph3::RxLine::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter){
+}

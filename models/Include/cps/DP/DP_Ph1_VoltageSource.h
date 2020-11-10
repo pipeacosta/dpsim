@@ -137,7 +137,7 @@ namespace Ph1 {
 		// TODO
 		void daeInitialize(double time, double state[], double dstate_dt[], int& counter){};
 		//TODO
-		void daePostStep(const double state[], const double dstate_dt[], int& counter){};
+		void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter){};
 		//TODO
 		int getNumberOfStateVariables() {return 0;}
 	};

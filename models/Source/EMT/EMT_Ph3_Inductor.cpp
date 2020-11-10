@@ -30,6 +30,7 @@ SimPowerComp<Real>::Ptr EMT::Ph3::Inductor::clone(String name) {
 void EMT::Ph3::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 
 	Real omega = 2 * PI * frequency;
+	std::cout << "omega: " << omega << std::endl;
 	MatrixComp impedance = MatrixComp::Zero(3, 3);
 	impedance <<
 		Complex(0, omega * mInductance(0, 0)), Complex(0, omega * mInductance(0, 1)), Complex(0, omega * mInductance(0, 2)),
@@ -54,11 +55,19 @@ void EMT::Ph3::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 		"\nCurrent: {:s}"
 		"\nTerminal 0 voltage: {:s}"
 		"\nTerminal 1 voltage: {:s}"
+		"\nInductance: {:f}"
+		"\nImpedance: {:s}"
+		"\nAdmittance: {:s}"
 		"\n--- Initialization from powerflow finished ---",
 		Logger::matrixToString(mIntfVoltage),
 		Logger::matrixToString(mIntfCurrent),
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(0)),
-		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)));
+		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)),
+		mInductance(0, 0),
+		impedance(0, 0),
+		admittance(0, 0)
+	);
+	mSLog->flush();
 }
 
 void EMT::Ph3::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
@@ -208,3 +217,102 @@ void EMT::Ph3::Inductor::mnaUpdateCurrent(const Matrix& leftVector) {
 	mSLog->flush();
 }
 
+// #### DAE functions ####
+
+void EMT::Ph3::Inductor::daeInitialize(double time, double state[], 
+	double dstate_dt[], int& offset) {
+
+	updateMatrixNodeIndices();
+
+	// state variable is the inductor current
+	// init current throw inductor: i_L = i-i_r
+	state[offset] = mIntfCurrent(0,0);
+	dstate_dt[offset]   = mIntfVoltage(0,0)/mInductance(0,0);
+	state[offset+1] = mIntfCurrent(1,0);
+	dstate_dt[offset+1] = mIntfVoltage(1,0)/mInductance(1,1);
+	state[offset+2] = mIntfCurrent(2,0);
+	dstate_dt[offset+2] = mIntfVoltage(2,0)/mInductance(2, 2);
+
+	mSLog->info(
+		"\n--- daeInitialize ---"
+		"\nState variable are inductor current"
+		"\nAdded current-phase1 through the inductor '{:s}' to state vector, initial value={:f}A"
+		"\nAdded current-phase2 through the inductor '{:s}' to state vector, initial value={:f}A"
+		"\nAdded current-phase3 through the inductor '{:s}' to state vector, initial value={:f}A"
+		"\nAdded derivative of current-phase1 through the inductor '{:s}' to derivative state vector, initial value={:f}"
+		"\nAdded derivative of current-phase2 through the inductor '{:s}' to derivative state vector, initial value={:f}"
+		"\nAdded derivative of current-phase3 through the inductor '{:s}' to derivative state vector, initial value={:f}"
+		"\n--- daeInitialize finished ---",
+		this->name(), state[offset],
+		this->name(), state[offset+1],
+		this->name(), state[offset+2],
+		this->name(), dstate_dt[offset],
+		this->name(), dstate_dt[offset+1],
+		this->name(), dstate_dt[offset+2]
+	);
+	mSLog->flush();
+}
+
+void EMT::Ph3::Inductor::daeResidual(double sim_time, 
+	const double state[], const double dstate_dt[], 
+	double resid[], std::vector<int>& off) {
+
+	int c_offset = off[0]+off[1]; //current offset for component
+	int index_node00 = matrixNodeIndex(0, 0);
+	int index_node01 = matrixNodeIndex(0, 1);
+	int index_node02 = matrixNodeIndex(0, 2);
+	int index_node10 = matrixNodeIndex(1, 0);
+	int index_node11 = matrixNodeIndex(1, 1);
+	int index_node12 = matrixNodeIndex(1, 2);
+
+	//residual function: voltage_node1 - voltage_node0 - L*di(t)/dt where di(t)/dt=dstate_dt
+	resid[c_offset]   = -mInductance(0,0)*dstate_dt[c_offset];
+	resid[c_offset+1] = -mInductance(1,1)*dstate_dt[c_offset+1];
+	resid[c_offset+2] = -mInductance(2,2)*dstate_dt[c_offset+2];
+	if (terminalNotGrounded(1)) {
+		resid[c_offset]   += state[index_node10];
+		resid[c_offset+1] += state[index_node11];
+		resid[c_offset+2] += state[index_node12];
+
+		//update nodal equations node 1 (sum inductor current)
+		resid[index_node10] += state[c_offset];
+		resid[index_node11] += state[c_offset+1];
+		resid[index_node12] += state[c_offset+2];
+	}
+	if (terminalNotGrounded(0)) {
+		resid[c_offset]   -= state[index_node00];
+		resid[c_offset+1] -= state[index_node01];
+		resid[c_offset+2] -= state[index_node02];
+
+		//update nodal equations node 0 (substract inductor current)
+		resid[index_node00] -= state[c_offset];
+		resid[index_node01] -= state[c_offset+1];
+		resid[index_node02] -= state[c_offset+2];
+	}
+
+	off[1] += 3;
+}
+
+void EMT::Ph3::Inductor::daePostStep(double Nexttime, const double state[], 
+	const double dstate_dt[], int& offset) {
+	
+	mIntfVoltage(0, 0) += 0.0;
+	mIntfVoltage(1, 0) += 0.0;
+	mIntfVoltage(2, 0) += 0.0;
+	if (terminalNotGrounded(1)) {
+		mIntfVoltage(0, 0) += state[matrixNodeIndex(1, 0)];
+		mIntfVoltage(1, 0) += state[matrixNodeIndex(1, 1)];
+		mIntfVoltage(2, 0) += state[matrixNodeIndex(1, 2)];
+	}
+	if (terminalNotGrounded(0)) {
+		mIntfVoltage(0, 0) -= state[matrixNodeIndex(0, 0)];
+		mIntfVoltage(1, 0) -= state[matrixNodeIndex(0, 1)];
+		mIntfVoltage(2, 0) -= state[matrixNodeIndex(0, 2)];
+	}
+
+	mIntfCurrent(0, 0) = state[offset];
+	mIntfCurrent(1, 0) = state[offset+1];
+	mIntfCurrent(2, 0) = state[offset+2];
+
+	offset+=3;
+}

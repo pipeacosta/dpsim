@@ -28,7 +28,7 @@ namespace CPS {
 		///Residual Function for DAE Solver
 		virtual void daeResidual(double sim_time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off) = 0;
 		///
-		virtual void daePostStep(const double state[], const double dstate_dt[], int& counter)=0;
+		virtual void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter)=0;
 		///
 		virtual int getNumberOfStateVariables()=0;
 	};
