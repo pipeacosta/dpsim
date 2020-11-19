@@ -68,7 +68,12 @@ namespace DPsim {
         /// number of steps taken by ida
 		long int mNumberStepsIDA = 0;
 		/// number of calls to the user's res function
-        long int mNumberCallsResidualFunctins=0;
+        long int mNumberCallsResidualFunctions=0;
+		/// cumulative number of nonlinear iterations performed
+		long int mNonLinearIters;
+		/// integration step size taken on the last internal step
+		realtype mLastIntegrationStep;
+
         std::vector<CPS::DAEInterface::ResFn> mResidualFunctions;
 
 		/// Residual Function of entire System

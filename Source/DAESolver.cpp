@@ -105,7 +105,6 @@ void DAESolver<VarType>::initialize(Real t0) {
     mSLog->info("Number of Eqn.: {}", mNEQ);
     
     mSimTime = t0;
-    //mSimTime = t0+mTimestep;
     int counter = 0;
     realtype *sval = NULL, *s_dtval = NULL;
     
@@ -172,7 +171,7 @@ void DAESolver<VarType>::initialize(Real t0) {
 
     // Set relative tolerance and absolute error
     mRelativeTolerance = RCONST(1e-6); // Set relative tolerance  1e-4 = 0.01%
-    mAbsoluteTolerance = RCONST(1e-2); // Set absolute error
+    mAbsoluteTolerance = RCONST(1e-1); // Set absolute error
 
     // creates the IDA solver memory block
     mIDAMemoryBlock = IDACreate();
@@ -202,12 +201,12 @@ void DAESolver<VarType>::initialize(Real t0) {
 	}
 
     /*
+    //Optional IDA input functions
     mSLog->info("Call IDASetStopTime");
     ret = IDASetStopTime(mIDAMemoryBlock, mTimestep);
     if (check_retval(&ret, "IDASetStopTime", 1)) {
     	throw CPS::Exception();
 	}
-
     mSLog->info("Call IDASetInitStep");
     ret = IDASetInitStep(mIDAMemoryBlock, RCONST(1e-10));
     if (check_retval(&ret, "IDASetInitStep", 1)) {
@@ -223,63 +222,28 @@ void DAESolver<VarType>::initialize(Real t0) {
     if (check_retval(&ret, "IDASetNonlinConvCoef", 1)) {
     	throw CPS::Exception();
 	}
-    */
-
-   /*
-    // specifies algebraic/differential components in the y vector
-    // A value of 1.0 indicates a differential variable, 
-    // while 0.0 indicates an algebraic variable.
-    N_Vector components_type = NULL;
-    components_type = N_VNew_Serial(mNEQ);
-    realtype *components_type_val = NULL;
-    components_type_val  = N_VGetArrayPointer(components_type);
-    counter = 0;
-    for (auto node : mNodes) {
-        if (node->phaseType() == PhaseType::Single) {
-            components_type_val[counter++] = 0.0;
-        }
-        else if (node->phaseType() == PhaseType::ABC) {
-            components_type_val[counter++] = 1.0;
-            components_type_val[counter++] = 1.0;
-            components_type_val[counter++] = 1.0;
-        }
-    }
-    //for (auto daeComp : mDAEComponents) {
-    //    // Initialize component voltages of state vector
-    //    components_type_val[counter++] = daeComp->getTypeEq();
-    //}
-    components_type_val[counter++] = 0.0;
-    components_type_val[counter++] = 0.0;
-    components_type_val[counter++] = 0.0;
-    components_type_val[counter++] = 1.0;
-    components_type_val[counter++] = 1.0;
-    components_type_val[counter++] = 1.0;
-
-    ret = IDASetId(mIDAMemoryBlock, components_type);
-    if (check_retval(&ret, "IDASetId", 1)) {
-        throw CPS::Exception();
-    }
-    */
-
-	
-    mSLog->info("Call IDA Solver Stuff");
-    // Allocate and connect Matrix mJacobianMatrix and solver mLinearSolver to IDA
-    mJacobianMatrix = SUNDenseMatrix(mNEQ, mNEQ);
-    mLinearSolver = SUNDenseLinearSolver(mStateVector, mJacobianMatrix);
-    ret = IDADlsSetLinearSolver(mIDAMemoryBlock, mLinearSolver, mJacobianMatrix);
-
-
+    mSLog->info("Call IDASetMaxNumSteps");
+    ret = IDASetMaxNumSteps(mIDAMemoryBlock, 5000);  //Max. number of timesteps until tout (-1 = unlimited)
+    if (check_retval(&ret, "IDASetMaxNumSteps", 1)) {
+    	throw CPS::Exception();
+	}
+    mSLog->info("Call IDASetMaxConvFails");
+    ret = IDASetMaxConvFails(mIDAMemoryBlock, 50000); //Max. number of convergence failures at one step
+    if (check_retval(&ret, "IDASetMaxNumSteps", 1)) {
+    	throw CPS::Exception();
+	}
     // calculates corrected initial conditions
-    /*
     ret = IDACalcIC(mIDAMemoryBlock, IDA_Y_INIT, mTimestep);
     if (check_retval(&ret, "IDACalcIC", 1)) {
     	throw CPS::Exception();
 	}
     */
-  
-    //Optional IDA input functions
-    //ret = IDASetMaxNumSteps(mIDAMemoryBlock, 5000);  //Max. number of timesteps until tout (-1 = unlimited)
-    //ret = IDASetMaxConvFails(mIDAMemoryBlock, 50000); //Max. number of convergence failures at one step
+
+    mSLog->info("Call IDA Solver Stuff");
+    // Allocate and connect Matrix mJacobianMatrix and solver mLinearSolver to IDA
+    mJacobianMatrix = SUNDenseMatrix(mNEQ, mNEQ);
+    mLinearSolver = SUNDenseLinearSolver(mStateVector, mJacobianMatrix);
+    ret = IDADlsSetLinearSolver(mIDAMemoryBlock, mLinearSolver, mJacobianMatrix);
 
     mSLog->info("--- Finished initialization --- \n");
     mSLog->flush();
@@ -331,31 +295,51 @@ Real DAESolver<VarType>::step(Real time) {
     realtype NextTime = (realtype) time+mTimestep;
     int ret = IDASolve(mIDAMemoryBlock, NextTime, &mTimeReachedSolver, mStateVector, mDerivativeStateVector, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
     if (ret != IDA_SUCCESS) {
-        mSLog->info("\n\nIda Error: {}", ret);
-        void(IDAGetNumSteps(mIDAMemoryBlock, &mNumberStepsIDA));
-        void(IDAGetNumResEvals(mIDAMemoryBlock, &mNumberCallsResidualFunctins));
-        mSLog->info("Cumulative number of internal steps: {}", mNumberStepsIDA);
-        mSLog->info("Res Eval: {}", mNumberCallsResidualFunctins);
-        mSLog->info("Time Reached Solver: {}", mTimeReachedSolver);
-        mSLog->info("Next Time: {}", NextTime);
+        IDAGetNumSteps(mIDAMemoryBlock, &mNumberStepsIDA);
+        IDAGetNumResEvals(mIDAMemoryBlock, &mNumberCallsResidualFunctions);
+        IDAGetNumNonlinSolvIters(mIDAMemoryBlock, &mNonLinearIters);
+        IDAGetLastStep(mIDAMemoryBlock, &mLastIntegrationStep);
+        mSLog->info(
+            "\n\n----------------------IDA Error: {}"
+            "\nTime: {}"
+            "\nCumulative number of internal steps: {}"
+            "\nCumulative number of calls residual function: {}"
+            "\nCumulative number of nonlinear iterations performed: {}"
+            "\nTime Reached Solver: {}"
+            "\nIntegration step size taken on the last internal step: {}"
+            "\nSimulation finished",
+            ret,
+            time, 
+            mNumberStepsIDA, 
+            mNumberCallsResidualFunctions,
+            mNonLinearIters, 
+            mTimeReachedSolver, 
+            mLastIntegrationStep
+        );
         mSLog->flush();
         throw CPS::Exception();
     } 
-    void(IDAGetNumSteps(mIDAMemoryBlock, &mNumberStepsIDA));
-    void(IDAGetNumResEvals(mIDAMemoryBlock, &mNumberCallsResidualFunctins));
-    long int nniters =0;
-    realtype hlast =0;
-    IDAGetNumNonlinSolvIters(mIDAMemoryBlock, &nniters);
-    IDAGetLastStep(mIDAMemoryBlock, &hlast);
-    mSLog->info("\n\n----------------------\nTime: {}", NextTime);
-    mSLog->info("Cumulative number of internal steps: {}", mNumberStepsIDA);
-    mSLog->info("Number of calls residual function: {}", mNumberCallsResidualFunctins);
-    mSLog->info("Cumulative number of nonlinear iterations performed: {}", nniters);
-    mSLog->info("Time Reached Solver: {}", mTimeReachedSolver);
-    mSLog->info("Integration step size taken on the last internal step: {}", hlast);
-
+    IDAGetNumSteps(mIDAMemoryBlock, &mNumberStepsIDA);
+    IDAGetNumResEvals(mIDAMemoryBlock, &mNumberCallsResidualFunctions);
+    IDAGetNumNonlinSolvIters(mIDAMemoryBlock, &mNonLinearIters);
+    IDAGetLastStep(mIDAMemoryBlock, &mLastIntegrationStep);
+    mSLog->debug(
+        "\n\n----------------------\nTime: {}"
+        "Cumulative number of internal steps: {}"
+        "Cumulative number of calls residual function: {}"
+        "Cumulative number of nonlinear iterations performed: {}"
+        "Time Reached Solver: {}"
+        "Integration step size taken on the last internal step: {}",
+        time, 
+        mNumberStepsIDA, 
+        mNumberCallsResidualFunctions,
+        mNonLinearIters, 
+        mTimeReachedSolver, 
+        mLastIntegrationStep
+    );
+    mSLog->flush();
+    
     //update node voltages
-    //realtype *sval = NULL;
     realtype *sval = NULL;
     sval  = N_VGetArrayPointer(mStateVector);
     realtype *dstate_val = NULL;

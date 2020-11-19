@@ -327,8 +327,8 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 	}	
 	// else if (mReactance(0,0) == 0) {}
 	
-	mSLog->info(
-		"\n\n--- NetworkInjection - SimStep = {:f} ---"
+	mSLog->debug(
+		"\n\n--- daeResidual NetworkInjection - name: {:s} SimStep = {:f} ---"
 		"\nresid[c_offset]   = state[pos_node1] - mInductance(0,0)*dstate_dt[c_offset]   = {:f} - {:f}*{:f} = {:f}"
 		"\nresid[c_offset+1] = state[pos_node2] - mInductance(1,1)*dstate_dt[c_offset+1] = {:f} - {:f}*{:f} = {:f}"
 		"\nresid[c_offset+2] = state[pos_node3] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f}*{:f} = {:f}"
@@ -338,7 +338,7 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 		"\nresid[pos_node2] += state[c_offset+1] + state[pos_node2]*mConductance(1,1) = {:f} + {:f}*{:f} = {:f}"
 		"\nresid[pos_node3] += state[c_offset+2] + state[pos_node3]*mConductance(2,2) = {:f} + {:f}*{:f} = {:f}",
 
-		sim_time,
+		this->name(), sim_time,
 		state[pos_node1], mInductance(0,0), dstate_dt[c_offset], resid[c_offset],
 		state[pos_node2], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
 		state[pos_node3], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
@@ -351,13 +351,15 @@ void EMT::Ph3::RXLoad::daeResidual(double sim_time,
 	off[1] += 3;
 }
 
-void EMT::Ph3::RXLoad::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
+void EMT::Ph3::RXLoad::daePostStep(double Nexttime, const double state[], 
+	const double dstate_dt[], int& offset) {
+	
 	mIntfVoltage(0, 0) = state[matrixNodeIndex(0, 0)];
 	mIntfVoltage(1, 0) = state[matrixNodeIndex(0, 1)];
 	mIntfVoltage(2, 0) = state[matrixNodeIndex(0, 2)];
 
 	if (mReactance(0,0) > 0) {
-		mIntfCurrent(0, 0) = state[offset] + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
+		mIntfCurrent(0, 0) = state[offset]   + state[matrixNodeIndex(0, 0)]*mConductance(0,0);
 		mIntfCurrent(1, 0) = state[offset+1] + state[matrixNodeIndex(0, 1)]*mConductance(1,1);
 		mIntfCurrent(2, 0) = state[offset+2] + state[matrixNodeIndex(0, 2)]*mConductance(2,2);
 	}

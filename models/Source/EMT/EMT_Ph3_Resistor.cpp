@@ -199,8 +199,8 @@ void EMT::Ph3::Resistor::daeResidual(double time,
 		resid[matrixNodeIndex(0, 2)] -= state[matrixNodeIndex(1, 2)]*mConductance(2, 2);
 	}
 
-	mSLog->info(
-		"\n\n--- 3Ph-Resistor - SimStep = {:f} ---"
+	mSLog->debug(
+		"\n\n--- daeResidual 3Ph-Resistor name: {:s} - SimStep = {:f} ---"
 		"\nupdate nodal equations of node 0"
 		"\nresid[matrixNodeIndex(0, 0)] += (state[matrixNodeIndex(0, 0)]-state[matrixNodeIndex(1, 0))*mConductance(0, 0) = ({:f} - {:f})*{:f} = {:f}"
 		"\nresid[matrixNodeIndex(0, 1)] += (state[matrixNodeIndex(0, 1)]-state[matrixNodeIndex(1, 1))*mConductance(1, 1) = ({:f} - {:f})*{:f} = {:f}"
@@ -211,7 +211,7 @@ void EMT::Ph3::Resistor::daeResidual(double time,
 		"\nresid[matrixNodeIndex(1, 1)] += (state[matrixNodeIndex(1, 1)]-state[matrixNodeIndex(0, 1))*mConductance(1, 1) = ({:f} - {:f})*{:f} = {:f}"
 		"\nresid[matrixNodeIndex(1, 2)] += (state[matrixNodeIndex(1, 2)]-state[matrixNodeIndex(0, 2))*mConductance(2, 2) = ({:f} - {:f})*{:f} = {:f}",
 
-		time,
+		this->name(), time,
 		state[matrixNodeIndex(0, 0)], state[matrixNodeIndex(1, 0)], mConductance(0, 0), resid[matrixNodeIndex(0, 0)],
 		state[matrixNodeIndex(0, 1)], state[matrixNodeIndex(1, 1)], mConductance(1, 1), resid[matrixNodeIndex(0, 1)],
 		state[matrixNodeIndex(0, 2)], state[matrixNodeIndex(1, 2)], mConductance(2, 2), resid[matrixNodeIndex(0, 2)],

@@ -163,6 +163,7 @@ void EMT::Ph3::NetworkInjection::daeInitialize(double time, double state[],
 
 	mSLog->info(
 		"\n--- daeInitialize ---"
+		"\nInitial time={:f}s"
 		"\nAdded current phase1 of NetworkInjection '{:s}' to state vector, initial value={:f}A"
 		"\nAdded current phase2 of NetworkInjection '{:s}' to state vector, initial value={:f}A"
 		"\nAdded current phase3 of NetworkInjection '{:s}' to state vector, initial value={:f}A"
@@ -170,6 +171,7 @@ void EMT::Ph3::NetworkInjection::daeInitialize(double time, double state[],
 		"\nAdded derivative of current phase2 of NetworkInjection '{:s}' to derivative state vector, initial value={:f}"
 		"\nAdded derivative of current phase3 of NetworkInjection '{:s}' to derivative state vector, initial value={:f}"
 		"\n--- daeInitialize finished ---",
+		time,
 		this->name(), state[offset],
 		this->name(), state[offset+1],
 		this->name(), state[offset+2],
@@ -185,7 +187,7 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 	const double state[], const double dstate_dt[],
 	double resid[], std::vector<int>& off) {
 
-	//this->updateVoltage(sim_time);
+	this->updateVoltage(sim_time);
 	int c_offset = off[0]+off[1]; //current offset for component
 	
 	int pos_node1 = matrixNodeIndex(0, 0);
@@ -200,8 +202,8 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 	resid[pos_node2] -= state[c_offset+1];
 	resid[pos_node3] -= state[c_offset+2];
 
-	mSLog->info(
-		"\n\n--- NetworkInjection - SimStep = {:f} ---"
+	mSLog->debug(
+		"\n\n--- NetworkInjection name: {:s} - SimTime= {:f} ---"
 		"\nresid[c_offset]   = state[pos_node1] - mIntfVoltage(0,0) = {:f} - {:f} = {:f}"
 		"\nresid[c_offset+1] = state[pos_node2] - mIntfVoltage(1,0) = {:f} - {:f} = {:f}"
 		"\nresid[c_offset+2] = state[pos_node3] - mIntfVoltage(2,0) = {:f} - {:f} = {:f}"
@@ -211,7 +213,7 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 		"\nresid[pos_node2] -= state[c_offset+1] --> resid[pos_node2] -= {:f}"
 		"\nresid[pos_node3] -= state[c_offset+2] --> resid[pos_node3] -= {:f}",
 
-		sim_time,
+		this->name(), sim_time,
 		state[pos_node1], mIntfVoltage(0,0), resid[c_offset],
 		state[pos_node2], mIntfVoltage(1,0), resid[c_offset+1],
 		state[pos_node3], mIntfVoltage(2,0), resid[c_offset+2],
@@ -226,7 +228,7 @@ void EMT::Ph3::NetworkInjection::daeResidual(double sim_time,
 
 void EMT::Ph3::NetworkInjection::daePostStep(double Nexttime, const double state[], 
 	const double dstate_dt[], int& offset) {
-	this->updateVoltage(Nexttime);
+	//this->updateVoltage(Nexttime);
 	mIntfCurrent(0,0) = state[offset++];
 	mIntfCurrent(1,0) = state[offset++];
 	mIntfCurrent(2,0) = state[offset++];

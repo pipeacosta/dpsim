@@ -30,7 +30,6 @@ SimPowerComp<Real>::Ptr EMT::Ph3::Inductor::clone(String name) {
 void EMT::Ph3::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 
 	Real omega = 2 * PI * frequency;
-	std::cout << "omega: " << omega << std::endl;
 	MatrixComp impedance = MatrixComp::Zero(3, 3);
 	impedance <<
 		Complex(0, omega * mInductance(0, 0)), Complex(0, omega * mInductance(0, 1)), Complex(0, omega * mInductance(0, 2)),
@@ -290,6 +289,83 @@ void EMT::Ph3::Inductor::daeResidual(double sim_time,
 		resid[index_node02] -= state[c_offset+2];
 	}
 
+	if (terminalNotGrounded(1) && terminalNotGrounded(0))
+	{
+		mSLog->debug(
+			"\n\n--- daeResidual 3Ph-Inductor name: {:s} - SimStep = {} ---"
+			"\nupdate residual functions"
+			"\nresid[c_offset]   = resid[matrixNodeIndex(1, 0)] - state[matrixNodeIndex(0, 0)] - mInductance(0,0)*dstate_dt[c_offset]   = {:f} - {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+1] = resid[matrixNodeIndex(1, 1)] - state[matrixNodeIndex(0, 1)] - mInductance(1,1)*dstate_dt[c_offset+1] = {:f} - {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+2] = resid[matrixNodeIndex(1, 2)] - state[matrixNodeIndex(0, 2)] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f} - {:f}*{:f} = {:f}"
+
+			"\nupdate nodal equations of node 0"
+			"\nresid[matrixNodeIndex(0, 0)] -= state[c_offset]   -= {:f} = {:f}"
+			"\nresid[matrixNodeIndex(0, 1)] -= state[c_offset+1] -= {:f} = {:f}"
+			"\nresid[matrixNodeIndex(0, 2)] -= state[c_offset+2] -= {:f} = {:f}"
+
+			"\nupdate nodal equations of node 1"
+			"\nresid[matrixNodeIndex(1, 0)] += state[c_offset]   += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(1, 1)] += state[c_offset+1] += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(1, 2)] += state[c_offset+2] += {:f} = {:f}",
+
+			this->name(), sim_time,
+			state[index_node10], state[index_node00], mInductance(0,0), dstate_dt[c_offset],   resid[c_offset],  
+			state[index_node11], state[index_node01], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
+			state[index_node12], state[index_node02], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
+			state[c_offset],     resid[index_node00], 
+			state[c_offset+1],   resid[index_node01],
+			state[c_offset+2],   resid[index_node02],
+			state[c_offset],     resid[index_node10],
+			state[c_offset+1],   resid[index_node11],
+			state[c_offset+2],   resid[index_node12]
+		);
+	}
+	else if (!terminalNotGrounded(0))
+	{
+		mSLog->debug(
+			"\n\n--- daeResidual 3Ph-Inductor name: {:s} - SimStep = {:f} ---"
+			"\nupdate residual functions (Terminal 0 grounded!)"
+			"\nresid[c_offset]   = resid[matrixNodeIndex(1, 0)] - mInductance(0,0)*dstate_dt[c_offset]   = {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+1] = resid[matrixNodeIndex(1, 1)] - mInductance(1,1)*dstate_dt[c_offset+1] = {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+2] = resid[matrixNodeIndex(1, 2)] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f}*{:f} = {:f}"
+
+			"\nupdate nodal equations of node 1 (add inductor current, if terminal is ground --> resid[node]==0!)"
+			"\nresid[matrixNodeIndex(1, 0)] += state[c_offset]   += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(1, 1)] += state[c_offset+1] += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(1, 2)] += state[c_offset+2] += {:f} = {:f}",
+
+			this->name(), sim_time,
+			state[index_node10], mInductance(0,0), dstate_dt[c_offset],   resid[c_offset],  
+			state[index_node11], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
+			state[index_node12], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
+			state[c_offset],   resid[index_node10],
+			state[c_offset+1], resid[index_node11],
+			state[c_offset+2], resid[index_node12]
+		);
+	}
+	else if (!terminalNotGrounded(1))
+	{
+		mSLog->debug(
+			"\n\n--- daeResidual 3Ph-Inductor name: {:s} - SimStep = {:f} ---"
+			"\nupdate residual functions (Terminal 1 grounded!)"
+			"\nresid[c_offset]   = resid[matrixNodeIndex(0, 0)] - mInductance(0,0)*dstate_dt[c_offset]   = {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+1] = resid[matrixNodeIndex(0, 1)] - mInductance(1,1)*dstate_dt[c_offset+1] = {:f} - {:f}*{:f} = {:f}"
+			"\nresid[c_offset+2] = resid[matrixNodeIndex(0, 2)] - mInductance(2,2)*dstate_dt[c_offset+2] = {:f} - {:f}*{:f} = {:f}"
+
+			"\nupdate nodal equations of node 0 (add inductor current, if terminal is ground --> resid[node]==0!)"
+			"\nresid[matrixNodeIndex(0, 0)] += state[c_offset]   += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(0, 1)] += state[c_offset+1] += {:f} = {:f}"
+			"\nresid[matrixNodeIndex(0, 2)] += state[c_offset+2] += {:f} = {:f}",
+
+			this->name(), sim_time,
+			state[index_node00], mInductance(0,0), dstate_dt[c_offset],   resid[c_offset],  
+			state[index_node01], mInductance(1,1), dstate_dt[c_offset+1], resid[c_offset+1],
+			state[index_node02], mInductance(2,2), dstate_dt[c_offset+2], resid[c_offset+2],
+			state[c_offset],   resid[index_node00],
+			state[c_offset+1], resid[index_node01],
+			state[c_offset+2], resid[index_node02]
+		);
+	}
 	off[1] += 3;
 }
 

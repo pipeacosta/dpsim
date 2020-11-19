@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
     Real resistance = 5;
 	Real timeStep = 0.001;
 	Real finalTime = 0.1;
-	String simName = "DAE_EMT_3Ph_Slack_RL1";
+	String simName = "DAE_EMT_Slack_RL1";
 	Logger::setLogDir("logs/" + simName);
 
 	// Slack

@@ -29,24 +29,13 @@ int main(int argc, char* argv[]) {
 	// Parameters
 	Real frequency = 50;
 	Real Vnom = 110e3;
-	//Real Vnom = 110;
 	Matrix rline_param = Matrix::Zero(3, 3);
-	///*
 	rline_param <<
 		20., 0, 0,
 		0, 20., 0,
 		0, 0, 20.;
-	//	*/
-	/*
-	rline_param <<
-		2., 0, 0,
-		0, 2., 0,
-		0, 0, 2.;	
-	*/
 	Real pLoadNom = 0.5e6;
 	Real qLoadNom = 0.5e6;
-	//Real pLoadNom = 10000;
-	//Real qLoadNom = 10000;
 	Real r_load = std::pow(Vnom/sqrt(3), 2) * (1/pLoadNom);
 	Real i_load = std::pow(Vnom/sqrt(3), 2) * (1/qLoadNom) / (2 * PI * frequency);
 	Matrix p_load = Matrix::Zero(3, 3);
@@ -72,9 +61,9 @@ int main(int argc, char* argv[]) {
 
 
 	// ----- POWERFLOW FOR INITIALIZATION -----
-	Real timeStepPF = 0.001;
+	Real timeStepPF = 0.0001;
 	Real finalTimePF = 0.1;
-	String simNamePF = "SP_Ph3_Slack_RLine_RXLoad_Init";
+	String simNamePF = "SP_Ph3_Slack_Resistor_RXLoad_Init";
 	Logger::setLogDir("logs/" + simNamePF);
 
 	// Nodes
@@ -85,7 +74,6 @@ int main(int argc, char* argv[]) {
 	// voltage source
 	auto vsPF = SP::Ph3::VoltageSource::make("vsPF");
 	vsPF->setParameters(Vnom*RMS3PH_TO_PEAK1PH);
-    //vsPF->setParameters(Vnom);
 
 	// RLine
 	auto rlinePF = SP::Ph3::Resistor::make("rlinePF");
@@ -123,18 +111,18 @@ int main(int argc, char* argv[]) {
 	// ----- DYNAMIC SIMULATION -----
 	Real timeStepEMT  = 0.0001;
 	Real finalTimeEMT = 0.1;
-	String simNameEMT = "DAE_EMT_Slack_RLine_RXLoad_PF_Init";
+	String simNameEMT = "DAE_EMT_Slack_Resistor_RXLoad_PF_Init";
 	Logger::setLogDir("logs/" + simNameEMT);
 
 	// Nodes
-	std::vector<Complex> initialVoltage_n1{ n1PF->voltage()(0,0).real()*PEAK1PH_TO_RMS3PH, 
-											n1PF->voltage()(1,0).real()*PEAK1PH_TO_RMS3PH,
-											n1PF->voltage()(2,0).real()*PEAK1PH_TO_RMS3PH
+	std::vector<Complex> initialVoltage_n1{ n1PF->voltage()(0,0)*PEAK1PH_TO_RMS3PH, 
+											n1PF->voltage()(1,0)*PEAK1PH_TO_RMS3PH,
+											n1PF->voltage()(2,0)*PEAK1PH_TO_RMS3PH
 										  };
 	auto n1EMT = SimNode<Real>::make("n1EMT", PhaseType::ABC, initialVoltage_n1);
-	std::vector<Complex> initialVoltage_n2{ n2PF->voltage()(0,0).real()*PEAK1PH_TO_RMS3PH, 
-											n2PF->voltage()(1,0).real()*PEAK1PH_TO_RMS3PH,
-											n2PF->voltage()(2,0).real()*PEAK1PH_TO_RMS3PH
+	std::vector<Complex> initialVoltage_n2{ n2PF->voltage()(0,0)*PEAK1PH_TO_RMS3PH, 
+											n2PF->voltage()(1,0)*PEAK1PH_TO_RMS3PH,
+											n2PF->voltage()(2,0)*PEAK1PH_TO_RMS3PH
 										  };
 	auto n2EMT = SimNode<Real>::make("n2EMT", PhaseType::ABC, initialVoltage_n2);
 

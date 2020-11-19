@@ -32,9 +32,9 @@ using namespace CPS::EMT::Ph3;
 
 int main(int argc, char* argv[])
 {
-	Real timeStep = 0.0001;
+	Real timeStep = 0.001;
 	Real finalTime = 0.1;
-	String simName = "DAE_EMT_Slack_Resistor3Ph";
+	String simName = "DAE_EMT_Slack_Resistor";
 	Logger::setLogDir("logs/" + simName);
 
 	// Slack

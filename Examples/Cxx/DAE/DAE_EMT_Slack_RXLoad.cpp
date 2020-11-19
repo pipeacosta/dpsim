@@ -25,14 +25,9 @@ using namespace DPsim;
 using namespace CPS::EMT;
 using namespace CPS::EMT::Ph3;
 
-#define SHIFT_TO_PHASE_B Complex(cos(-2 * M_PI / 3), sin(-2 * M_PI / 3))
-#define SHIFT_TO_PHASE_C Complex(cos(2 * M_PI / 3), sin(2 * M_PI / 3))
-#define RMS3PH_TO_PEAK1PH sqrt(2./3.)
-#define PEAK1PH_TO_RMS3PH sqrt(3./2.)
-
 int main(int argc, char* argv[])
 {
-	Real timeStep = 0.000001;
+	Real timeStep = 0.001;
 	Real finalTime = 0.1;
 	String simName = "DAE_EMT_Slack_RXLoad";
 	Logger::setLogDir("logs/" + simName);
@@ -84,7 +79,7 @@ int main(int argc, char* argv[])
 	logger->addAttribute("v_load",  rxLoad->attribute("v_intf"));
 	logger->addAttribute("i_load",  rxLoad->attribute("i_intf"));
 
-	slack->setIntfCurrent(initCurrent_slack);
+	slack->setIntfCurrent(initCurrent_slack.real());
 	Simulation sim(simName, sys, timeStep, finalTime, Domain::EMT, Solver::Type::DAE);
 	sim.doSplitSubnets(false);
 	sim.addLogger(logger);
