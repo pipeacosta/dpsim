@@ -83,6 +83,10 @@ namespace CPS {
 					VoltageSource& mVoltageSource;
 					Attribute<Matrix>::Ptr mLeftVector;
 				};
+
+				// #### DAE Section ####
+				///
+				void daePreStep(Real time);
 			};
 		}
 	}

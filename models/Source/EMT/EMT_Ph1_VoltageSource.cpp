@@ -115,6 +115,10 @@ void EMT::Ph1::VoltageSource::daeInitialize(double time, double state[], double 
 	offset++;
 }
 
+void EMT::Ph1::VoltageSource::daePreStep(double sim_time) {
+	updateVoltage(sim_time);
+}
+
 void EMT::Ph1::VoltageSource::daeResidual(double sim_time, 
 	const double state[], const double dstate_dt[], 
 	double resid[], std::vector<int>& off) {
@@ -141,9 +145,6 @@ void EMT::Ph1::VoltageSource::daeResidual(double sim_time,
 }
 
 void EMT::Ph1::VoltageSource::daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& offset) {
-	this->updateVoltage(Nexttime);
-	//int Pos1 = matrixNodeIndex(1);
-	//mIntfVoltage(0,0) = state[Pos1];
 	mIntfCurrent(0,0) = state[offset];
 	offset++;
 }

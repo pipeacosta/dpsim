@@ -10,7 +10,6 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNAInterface.h>
-#include <cps/Solver/DAEInterface.h>
 #include <cps/DP/DP_Ph1_VoltageSource.h>
 
 namespace CPS {
@@ -22,7 +21,6 @@ namespace Ph1 {
 	class NetworkInjection :
 		public SimPowerComp<Complex>,
 		public MNAInterface,
-		public DAEInterface,
 		public SharedFactory<NetworkInjection> {
 	private:
 		// ### Electrical Subcomponents ###
@@ -95,18 +93,6 @@ namespace Ph1 {
 			NetworkInjection& mNetworkInjection;
 			Attribute<Matrix>::Ptr mLeftVector;
 		};
-
-		// #### DAE Section ####
-		///
-		Complex daeInitialize();
-		// TODO
-		void daeInitialize(double time, double state[], double dstate_dt[], int& counter){};
-		/// Residual function for DAE Solver
-		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
-		//TODO
-		void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter){};
-		//TODO
-		int getNumberOfStateVariables() {return 0;}
 	};
 }
 }

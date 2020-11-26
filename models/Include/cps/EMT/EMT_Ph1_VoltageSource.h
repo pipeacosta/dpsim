@@ -91,6 +91,8 @@ namespace Ph1 {
 		// #### DAE Section ####
 		///
 		void daeInitialize(double time, double state[], double dstate_dt[], int& offset);
+		///
+		void daePreStep(double time);
 		/// Residual function for DAE Solver
 		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
 		///

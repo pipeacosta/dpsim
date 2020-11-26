@@ -10,7 +10,6 @@
 
 #include <cps/SimPowerComp.h>
 #include <cps/Solver/MNATearInterface.h>
-#include <cps/Solver/DAEInterface.h>
 #include <cps/Base/Base_Ph1_Resistor.h>
 
 namespace CPS {
@@ -20,7 +19,6 @@ namespace Ph1 {
 	class Resistor :
 		public Base::Ph1::Resistor,
 		public MNATearInterface,
-		public DAEInterface,
 		public SimPowerComp<Complex>,
 		public SharedFactory<Resistor> {
 	public:
@@ -85,18 +83,6 @@ namespace Ph1 {
 
 		// #### MNA Tear Section ####
 		void mnaTearApplyMatrixStamp(Matrix& tearMatrix);
-
-		// #### DAE Section ####
-		///Residual Function for DAE Solver
-		void daeResidual(double time, const double state[], const double dstate_dt[], double resid[], std::vector<int>& off);
-		///Voltage Getter
-		Complex daeInitialize();
-		// TODO
-		void daeInitialize(double time, double state[], double dstate_dt[], int& counter){};
-		//TODO
-		void daePostStep(double Nexttime, const double state[], const double dstate_dt[], int& counter){};
-		//TODO
-		int getNumberOfStateVariables() {return 0;}
 	};
 }
 }

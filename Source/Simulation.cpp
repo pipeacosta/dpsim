@@ -122,7 +122,7 @@ void Simulation::createSolvers() {
 			break;
 #ifdef WITH_SUNDIALS
 		case Solver::Type::DAE:
-			solver = std::make_shared<DAESolver>(mName, mSystem, mTimeStep, 0.0);
+			solver = std::make_shared<DAESolver<VarType>>(mName, mSystem, mTimeStep, 0.0, mLogLevel);
 			mSolvers.push_back(solver);
 			break;
 #endif /* WITH_SUNDIALS */
@@ -205,16 +205,17 @@ void Simulation::createMNASolver() {
 			solver->initialize();
 		}
 		break;
-#ifdef WITH_SUNDIALS
-			case Solver::Type::DAE:
-				solver = std::make_shared<DAESolver<VarType>>(
-						mName + copySuffix, subnets[net], mTimeStep, 0.0);
-				break;
-#endif /* WITH_SUNDIALS */
 
-			default:
-				throw UnsupportedSolverException();
-		}
+//#ifdef WITH_SUNDIALS
+//			case Solver::Type::DAE:
+//				solver = std::make_shared<DAESolver<VarType>>(
+//						mName + copySuffix, subnets[net], mTimeStep, 0.0, mLogLevel);
+//				break;
+//#endif /* WITH_SUNDIALS */
+//
+//		default:
+//				throw UnsupportedSolverException();
+//		}
 		mSolvers.push_back(solver);
 	}
 }

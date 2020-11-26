@@ -55,6 +55,8 @@ namespace DPsim {
 		N_Vector mStateVector = NULL;
 		/// Derivates of the state vector with respect to time
 		N_Vector mDerivativeStateVector = NULL;
+		/// Vector to indicate differential(0.0) and algebraic(1.0) variable
+		//N_Vector mStateIDsVector = NULL;
 		/// Time IDA reached while solving
 		realtype mTimeReachedSolver;
 		/// Scalar absolute tolerance

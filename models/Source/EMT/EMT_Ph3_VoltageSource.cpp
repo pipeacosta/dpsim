@@ -161,3 +161,7 @@ void EMT::Ph3::VoltageSource::mnaUpdateCurrent(const Matrix& leftVector) {
 	mIntfCurrent(1, 0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::B));
 	mIntfCurrent(2, 0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::C));
 }
+
+void EMT::Ph3::VoltageSource::daePreStep(Real time) {
+	updateVoltage(time);
+}

@@ -78,7 +78,7 @@ void DAESolver<VarType>::initializeComponents() {
             throw CPS::Exception();
         }
         // Set initial values of all components
-        emtComp->initializeFromPowerflow(mSystem.mSystemFrequency);
+        emtComp->initializeFromNodesAndTerminals(mSystem.mSystemFrequency);
         
         auto daeComp = std::dynamic_pointer_cast<DAEInterface>(comp);
         if (!daeComp) {
@@ -293,6 +293,9 @@ int DAESolver<VarType>::residualFunction(realtype step_time,
 template <typename VarType>
 Real DAESolver<VarType>::step(Real time) {
     realtype NextTime = (realtype) time+mTimestep;
+    for (auto comp : mDAEComponents) { 
+        comp->daePreStep(time);
+    }
     int ret = IDASolve(mIDAMemoryBlock, NextTime, &mTimeReachedSolver, mStateVector, mDerivativeStateVector, IDA_NORMAL);  // TODO: find alternative to IDA_NORMAL
     if (ret != IDA_SUCCESS) {
         IDAGetNumSteps(mIDAMemoryBlock, &mNumberStepsIDA);
