@@ -34,6 +34,7 @@ logger.log_attribute('v2', 'v', n2)
 logger.log_attribute('r12', 'i_intf', r12)
 logger.log_attribute('ievs', 'i_intf', evs)
 logger.log_attribute('vevs', 'v_intf', evs)
+logger.log_attribute('vsrc', 'V_ref', evs)
 
 sim = dpsimpy.RealTimeSimulation(sim_name)
 sim.set_system(sys)
@@ -58,6 +59,7 @@ sim.add_interface(intf, True)
 
 sim.import_attribute(evs.attr('V_ref'), 0)
 sim.export_attribute(evs.attr('i_intf').derive_coeff(0, 0), 0)
+sim.export_attribute(r12.attr('i_intf').derive_coeff(0, 0), 1)
 
 sim.add_logger(logger)
 
