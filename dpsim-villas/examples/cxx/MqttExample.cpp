@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 	RealTimeSimulation sim(simName);
 	sim.setSystem(sys);
 	sim.setTimeStep(timeStep);
-	sim.setFinalTime(2.0);
+	sim.setFinalTime(20.0);
 	
     std::string mqttConfig = R"STRING({
         "type": "mqtt",
