@@ -6,6 +6,7 @@ add_library(dpsim-models STATIC
 	TopologicalTerminal.cpp
 	SimNode.cpp
 	SimPowerComp.cpp
+	MNASimPowerComp.cpp
 	CompositePowerComp.cpp
 	SystemTopology.cpp
 	CSVReader.cpp
@@ -163,6 +164,11 @@ endif()
 if(WITH_GSL)
 	list(APPEND MODELS_INCLUDE_DIRS ${GSL_INCLUDE_DIRS})
 	list(APPEND MODELS_LIBRARIES ${GSL_LIBRARIES})
+endif()
+
+if(WITH_KLU)
+	list(APPEND MODELS_INCLUDE_DIRS ${KLU_INCLUDE_DIRS})
+	list(APPEND MODELS_LIBRARIES ${KLU_LIBRARIES})
 endif()
 
 target_link_libraries(dpsim-models PUBLIC ${MODELS_LIBRARIES})

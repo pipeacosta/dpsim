@@ -16,7 +16,7 @@ EMT::Ph3::PiLine::PiLine(String uid, String name, Logger::Level logLevel)
 	setVirtualNodeNumber(1);
 	setTerminalNumber(2);
 
-	mSLog->info("Create {} {}", this->type(), name);
+	SPDLOG_LOGGER_INFO(mSLog, "Create {} {}", this->type(), name);
 	**mIntfVoltage = Matrix::Zero(3, 1);
 	**mIntfCurrent = Matrix::Zero(3, 1);
 
@@ -112,7 +112,7 @@ void EMT::Ph3::PiLine::initializeFromNodesAndTerminals(Real frequency) {
 		addMNASubComponent(mSubParallelCapacitor1, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, true);
 	}
 
-	mSLog->debug(
+	SPDLOG_LOGGER_DEBUG(mSLog, 
 		"\n--debug--"
 		"\n seriesRes: {:s}"
 		"\n seriesInd: {:s}"
@@ -125,7 +125,7 @@ void EMT::Ph3::PiLine::initializeFromNodesAndTerminals(Real frequency) {
 		Logger::matrixCompToString(vInitABC),
 		Logger::matrixCompToString(iInit));
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -148,7 +148,7 @@ void EMT::Ph3::PiLine::mnaParentAddPreStepDependencies(AttributeBase::List &prev
 }
 
 void EMT::Ph3::PiLine::mnaParentPreStep(Real time, Int timeStepCount) {
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
 void EMT::Ph3::PiLine::mnaParentAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
@@ -158,11 +158,11 @@ void EMT::Ph3::PiLine::mnaParentAddPostStepDependencies(AttributeBase::List &pre
 }
 
 void EMT::Ph3::PiLine::mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateVoltage(**leftVector);
-	mnaUpdateCurrent(**leftVector);
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
 }
 
-void EMT::Ph3::PiLine::mnaUpdateVoltage(const Matrix& leftVector) {
+void EMT::Ph3::PiLine::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// v1 - v0
 	**mIntfVoltage = Matrix::Zero(3, 1);
 	if (terminalNotGrounded(1)) {
@@ -177,6 +177,6 @@ void EMT::Ph3::PiLine::mnaUpdateVoltage(const Matrix& leftVector) {
 	}
 }
 
-void EMT::Ph3::PiLine::mnaUpdateCurrent(const Matrix& leftVector) {
+void EMT::Ph3::PiLine::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = mSubSeriesInductor->intfCurrent();
 }

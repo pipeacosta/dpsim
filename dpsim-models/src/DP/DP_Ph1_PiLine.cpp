@@ -15,7 +15,7 @@ DP::Ph1::PiLine::PiLine(String uid, String name, Logger::Level logLevel)
 	setVirtualNodeNumber(1);
 	setTerminalNumber(2);
 
-	mSLog->info("Create {} {}", this->type(), name);
+	SPDLOG_LOGGER_INFO(mSLog, "Create {} {}", this->type(), name);
 	**mIntfVoltage = MatrixComp::Zero(1,1);
 	**mIntfCurrent = MatrixComp::Zero(1,1);
 }
@@ -90,7 +90,7 @@ void DP::Ph1::PiLine::initializeFromNodesAndTerminals(Real frequency) {
 		addMNASubComponent(mSubParallelCapacitor1, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, true);
 	}
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -130,7 +130,7 @@ void DP::Ph1::PiLine::mnaParentPostStep(Real time, Int timeStepCount, Attribute<
 	this->mnaUpdateCurrent(**leftVector);
 }
 
-void DP::Ph1::PiLine::mnaUpdateVoltage(const Matrix& leftVector) {
+void DP::Ph1::PiLine::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	(**mIntfVoltage)(0, 0) = 0;
 	if (terminalNotGrounded(1))
 		(**mIntfVoltage)(0,0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(1));
@@ -138,7 +138,7 @@ void DP::Ph1::PiLine::mnaUpdateVoltage(const Matrix& leftVector) {
 		(**mIntfVoltage)(0,0) = (**mIntfVoltage)(0,0) - Math::complexFromVectorElement(leftVector, matrixNodeIndex(0));
 }
 
-void DP::Ph1::PiLine::mnaUpdateCurrent(const Matrix& leftVector) {
+void DP::Ph1::PiLine::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	(**mIntfCurrent)(0,0) = mSubSeriesInductor->intfCurrent()(0, 0);
 }
 
@@ -163,7 +163,7 @@ void DP::Ph1::PiLine::mnaTearInitialize(Real omega, Real timeStep) {
 	mSubSeriesInductor->mnaTearInitialize(omega, timeStep);
 }
 
-void DP::Ph1::PiLine::mnaTearApplyMatrixStamp(Matrix& tearMatrix) {
+void DP::Ph1::PiLine::mnaTearApplyMatrixStamp(SparseMatrixRow& tearMatrix) {
 	mSubSeriesResistor->mnaTearApplyMatrixStamp(tearMatrix);
 	mSubSeriesInductor->mnaTearApplyMatrixStamp(tearMatrix);
 }

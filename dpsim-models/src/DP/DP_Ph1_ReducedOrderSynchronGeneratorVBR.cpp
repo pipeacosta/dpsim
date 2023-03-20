@@ -16,7 +16,7 @@ DP::Ph1::ReducedOrderSynchronGeneratorVBR::ReducedOrderSynchronGeneratorVBR
 
 	mPhaseType = PhaseType::Single;
 	setTerminalNumber(1);
-	
+
 	// model variables
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
 	**mIntfCurrent = MatrixComp::Zero(1, 1);
@@ -50,7 +50,7 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::initializeResistanceMatrix() {
 }
 
 void DP::Ph1::ReducedOrderSynchronGeneratorVBR::calculateConductanceMatrix() {
-	Matrix resistanceMatrix = Matrix::Zero(2,2);
+	MatrixFixedSize<2, 2> resistanceMatrix = MatrixFixedSize<2, 2>::Zero(2,2);
 	resistanceMatrix(0,0) = mR_const_1ph.real() + mKa_1ph.real() + mKb_1ph.real();
 	resistanceMatrix(0,1) = -mR_const_1ph.imag() - mKa_1ph.imag() + mKb_1ph.imag();
 	resistanceMatrix(1,0) = mR_const_1ph.imag() + mKa_1ph.imag() + mKb_1ph.imag();
@@ -59,12 +59,12 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::calculateConductanceMatrix() {
 	mConductanceMatrix = resistanceMatrix.inverse();
 }
 
-void DP::Ph1::ReducedOrderSynchronGeneratorVBR::calculateAuxiliarVariables() {	
-	mKa = Matrix::Zero(1,3);	
+void DP::Ph1::ReducedOrderSynchronGeneratorVBR::calculateAuxiliarVariables() {
+	mKa = Matrix::Zero(1,3);
 	mKa = mKc * Complex(cos(2. * **mThetaMech), sin(2. * **mThetaMech));
 	mKa_1ph = (mKa * mShiftVector)(0,0);
 
-	mKb = Matrix::Zero(1,3);	
+	mKb = Matrix::Zero(1,3);
 	Real arg = 2. * **mThetaMech - 2. * mBase_OmMech * mSimTime ;
 	mKb = mKc * Complex(cos(arg), sin(arg));
 	mKb_1ph = (mKb * mShiftVectorConj)(0,0);
@@ -74,36 +74,54 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::calculateAuxiliarVariables() {
 	mKvbr(0,1) = -Complex(cos(**mThetaMech - mBase_OmMech * mSimTime - PI/2.), sin(**mThetaMech - mBase_OmMech * mSimTime - PI/2.));
 }
 
-void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaInitialize(Real omega, 
+void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaCompInitialize(Real omega,
 		Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 
-	Base::ReducedOrderSynchronGenerator<Complex>::mnaInitialize(omega, timeStep, leftVector);
+	Base::ReducedOrderSynchronGenerator<Complex>::mnaCompInitialize(omega, timeStep, leftVector);
 
 	if (mModelAsCurrentSource) {
+		// FIXME set variable matrix entries accordingly as shown below
 		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0), matrixNodeIndex(0, 0)));
 	} else {
+		// get matrix dimension to properly set variable entries
+		auto n = leftVector->asRawPointer()->rows();
+		auto complexOffset = (UInt)(n / 2);
+
 		// upper left
 		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex(), mVirtualNodes[0]->matrixNodeIndex()));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex() + complexOffset, mVirtualNodes[0]->matrixNodeIndex()));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex(), mVirtualNodes[0]->matrixNodeIndex() + complexOffset));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex() + complexOffset, mVirtualNodes[0]->matrixNodeIndex() + complexOffset));
 
-		// buttom right
+		// bottom right
 		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0), matrixNodeIndex(0, 0)));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0) + complexOffset, matrixNodeIndex(0, 0)));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0), matrixNodeIndex(0, 0) + complexOffset));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0) + complexOffset, matrixNodeIndex(0, 0) + complexOffset));
 
 		// off diagonal
 		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex(), matrixNodeIndex(0, 0)));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex() + complexOffset, matrixNodeIndex(0, 0)));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex(), matrixNodeIndex(0, 0) + complexOffset));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(mVirtualNodes[0]->matrixNodeIndex() + complexOffset, matrixNodeIndex(0, 0) + complexOffset));
+
 		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0), mVirtualNodes[0]->matrixNodeIndex()));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0) + complexOffset, mVirtualNodes[0]->matrixNodeIndex()));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0), mVirtualNodes[0]->matrixNodeIndex() + complexOffset));
+		mVariableSystemMatrixEntries.push_back(std::make_pair<UInt,UInt>(matrixNodeIndex(0, 0) + complexOffset, mVirtualNodes[0]->matrixNodeIndex() + complexOffset));
 	}
-	
-	mSLog->info("List of index pairs of varying matrix entries: ");
+
+	SPDLOG_LOGGER_INFO(mSLog, "List of index pairs of varying matrix entries: ");
 	for (auto indexPair : mVariableSystemMatrixEntries)
-		mSLog->info("({}, {})", indexPair.first, indexPair.second);
+		SPDLOG_LOGGER_INFO(mSLog, "({}, {})", indexPair.first, indexPair.second);
 }
 
-void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	if (mModelAsCurrentSource) {
 		// Stamp conductance matrix
-		// set buttom right block
+		// set bottom right block
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0, 0), matrixNodeIndex(0, 0), mConductanceMatrix);
-	
+
 	} else {
 		// Stamp voltage source
 		Math::setMatrixElement(systemMatrix, mVirtualNodes[0]->matrixNodeIndex(), mVirtualNodes[1]->matrixNodeIndex(), Complex(-1, 0));
@@ -114,7 +132,7 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaApplySystemMatrixStamp(Matrix
 		// set upper left block
 		Math::addToMatrixElement(systemMatrix, mVirtualNodes[0]->matrixNodeIndex(), mVirtualNodes[0]->matrixNodeIndex(), mConductanceMatrix);
 
-		// set buttom right block
+		// set bottom right block
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0, 0), matrixNodeIndex(0, 0), mConductanceMatrix);
 
 		// Set off diagonal blocks
@@ -123,20 +141,20 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaApplySystemMatrixStamp(Matrix
 	}
 }
 
-void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaApplyRightSideVectorStamp(Matrix& rightVector) {
+void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaCompApplyRightSideVectorStamp(Matrix& rightVector) {
 	if (mModelAsCurrentSource) {
 		// compute equivalent northon circuit in abc reference frame
-		mIvbr = Complex(mConductanceMatrix(0,0) * mEvbr.real() + mConductanceMatrix(0,1) * mEvbr.imag(), 
+		mIvbr = Complex(mConductanceMatrix(0,0) * mEvbr.real() + mConductanceMatrix(0,1) * mEvbr.imag(),
 					    mConductanceMatrix(1,0) * mEvbr.real() + mConductanceMatrix(1,1) * mEvbr.imag());
-		
+
 		Math::setVectorElement(rightVector, matrixNodeIndex(0,0), mIvbr);
-	
+
 	} else {
 		Math::setVectorElement(rightVector, mVirtualNodes[1]->matrixNodeIndex(), mEvbr);
 	}
 }
 
-void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaPostStep(const Matrix& leftVector) {
+void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaCompPostStep(const Matrix& leftVector) {
 	// update armature voltage
 	(**mIntfVoltage)(0, 0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(0, 0));
 
@@ -149,7 +167,7 @@ void DP::Ph1::ReducedOrderSynchronGeneratorVBR::mnaPostStep(const Matrix& leftVe
 
 	// update armature current
 	if (mModelAsCurrentSource) {
-		(**mIntfCurrent)(0, 0) = mIvbr - Complex(mConductanceMatrix(0,0) * (**mIntfVoltage)(0, 0).real() + mConductanceMatrix(0,1) * (**mIntfVoltage)(0, 0).imag(), 
+		(**mIntfCurrent)(0, 0) = mIvbr - Complex(mConductanceMatrix(0,0) * (**mIntfVoltage)(0, 0).real() + mConductanceMatrix(0,1) * (**mIntfVoltage)(0, 0).imag(),
 					    						 mConductanceMatrix(1,0) * (**mIntfVoltage)(0, 0).real() + mConductanceMatrix(1,1) * (**mIntfVoltage)(0, 0).imag());
 	} else {
 		(**mIntfCurrent)(0, 0) = Math::complexFromVectorElement(leftVector, mVirtualNodes[1]->matrixNodeIndex());
@@ -168,6 +186,6 @@ Matrix DP::Ph1::ReducedOrderSynchronGeneratorVBR::get_parkTransformMatrix() cons
 	abcToDq0 <<
 		2./3.*cos(**mThetaMech),  2./3.*cos(**mThetaMech - 2.*PI/3.),  2./3.*cos(**mThetaMech + 2.*PI/3.),
 		-2./3.*sin(**mThetaMech), -2./3.*sin(**mThetaMech - 2.*PI/3.), -2./3.*sin(**mThetaMech + 2.*PI/3.);
-	
+
 	return abcToDq0;
 }

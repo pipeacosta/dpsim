@@ -13,8 +13,8 @@ using namespace CPS;
 EMT::Ph3::SynchronGenerator6bOrderVBR::SynchronGenerator6bOrderVBR
     (const String & uid, const String & name, Logger::Level logLevel)
 	: ReducedOrderSynchronGeneratorVBR(uid, name, logLevel),
-	mEdq0_t(Attribute<Matrix>::create("Edq0_t", mAttributes)),
-	mEdq0_s(Attribute<Matrix>::create("Edq0_s", mAttributes)) {
+	mEdq0_t(mAttributes->create<Matrix>("Edq0_t")),
+	mEdq0_s(mAttributes->create<Matrix>("Edq0_s")) {
 
 	//
 	mSGOrder = SGOrder::SG6bOrder;
@@ -40,7 +40,7 @@ void EMT::Ph3::SynchronGenerator6bOrderVBR::specificInitialization() {
 	(**mEdq0_s)(0,0) = (**mVdq0)(0,0) - mLq_s * (**mIdq0)(1,0);
 	(**mEdq0_s)(1,0) = (**mVdq0)(1,0) + mLd_s * (**mIdq0)(0,0);
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Model specific initialization  ---"
 		"\nInitial Ed_t (per unit): {:f}"
 		"\nInitial Eq_t (per unit): {:f}"

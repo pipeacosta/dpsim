@@ -13,14 +13,14 @@ using namespace CPS;
 
 SP::Ph1::NetworkInjection::NetworkInjection(String uid, String name,
     Logger::Level logLevel) : CompositePowerComp<Complex>(uid, name, true, true, logLevel),
-	mVoltageRef(Attribute<Complex>::createDynamic("V_ref", mAttributes)),
-	mSrcFreq(Attribute<Real>::createDynamic("f_src", mAttributes)),
-	mVoltageSetPoint(Attribute<Real>::create("V_set", mAttributes)),
-	mVoltageSetPointPerUnit(Attribute<Real>::create("V_set_pu", mAttributes, 1.0)),
-	mActivePowerInjection(Attribute<Real>::create("p_inj", mAttributes)),
-	mReactivePowerInjection(Attribute<Real>::create("q_inj", mAttributes)) {
+	mVoltageRef(mAttributes->createDynamic<Complex>("V_ref")),
+	mSrcFreq(mAttributes->createDynamic<Real>("f_src")),
+	mVoltageSetPoint(mAttributes->create<Real>("V_set")),
+	mVoltageSetPointPerUnit(mAttributes->create<Real>("V_set_pu", 1.0)),
+	mActivePowerInjection(mAttributes->create<Real>("p_inj")),
+	mReactivePowerInjection(mAttributes->create<Real>("q_inj")) {
 
-	mSLog->info("Create {} of type {}", **mName, this->type());
+	SPDLOG_LOGGER_INFO(mSLog, "Create {} of type {}", **mName, this->type());
 	mSLog->flush();
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
 	**mIntfCurrent = MatrixComp::Zero(1, 1);
@@ -30,9 +30,9 @@ SP::Ph1::NetworkInjection::NetworkInjection(String uid, String name,
 	// Create electrical sub components
 	mSubVoltageSource = std::make_shared<SP::Ph1::VoltageSource>(**mName + "_vs", mLogLevel);
 	addMNASubComponent(mSubVoltageSource, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, true);
-	mSLog->info("Electrical subcomponents: ");
+	SPDLOG_LOGGER_INFO(mSLog, "Electrical subcomponents: ");
 	for (auto subcomp: mSubComponents)
-		mSLog->info("- {}", subcomp->name());
+		SPDLOG_LOGGER_INFO(mSLog, "- {}", subcomp->name());
 
 	// MNA attributes
 	mSubVoltageSource->mVoltageRef->setReference(mVoltageRef);
@@ -44,7 +44,7 @@ SP::Ph1::NetworkInjection::NetworkInjection(String uid, String name,
 void SP::Ph1::NetworkInjection::setParameters(Real voltageSetPoint) {
 	**mVoltageSetPoint = voltageSetPoint;
 
-	mSLog->info("Voltage Set-Point ={} [V]", **mVoltageSetPoint);
+	SPDLOG_LOGGER_INFO(mSLog, "Voltage Set-Point ={} [V]", **mVoltageSetPoint);
 	mSLog->flush();
 
 	mParametersSet = true;
@@ -55,7 +55,7 @@ void SP::Ph1::NetworkInjection::setParameters(Complex initialPhasor, Real freqSt
 
 	mSubVoltageSource->setParameters(initialPhasor, freqStart, rocof, timeStart, duration, smoothRamp);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(initialPhasor),
 				Logger::realToString(freqStart));
@@ -66,7 +66,7 @@ void SP::Ph1::NetworkInjection::setParameters(Complex initialPhasor, Real modula
 
 	mSubVoltageSource->setParameters(initialPhasor, modulationFrequency, modulationAmplitude, baseFrequency, zigzag);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(initialPhasor),
 				Logger::realToString(baseFrequency));
@@ -77,12 +77,12 @@ void SP::Ph1::NetworkInjection::setBaseVoltage(Real baseVoltage) {
 }
 
 void SP::Ph1::NetworkInjection::calculatePerUnitParameters(Real baseApparentPower, Real baseOmega) {
-    mSLog->info("#### Calculate Per Unit Parameters for {}", **mName);
-	mSLog->info("Base Voltage={} [V]", mBaseVoltage);
+    SPDLOG_LOGGER_INFO(mSLog, "#### Calculate Per Unit Parameters for {}", **mName);
+	SPDLOG_LOGGER_INFO(mSLog, "Base Voltage={} [V]", mBaseVoltage);
 
     **mVoltageSetPointPerUnit = **mVoltageSetPoint / mBaseVoltage;
 
-	mSLog->info("Voltage Set-Point ={} [pu]", **mVoltageSetPointPerUnit);
+	SPDLOG_LOGGER_INFO(mSLog, "Voltage Set-Point ={} [pu]", **mVoltageSetPointPerUnit);
 	mSLog->flush();
 }
 
@@ -102,7 +102,7 @@ void SP::Ph1::NetworkInjection::setParameters(Complex voltageRef, Real srcFreq) 
 
 	mSubVoltageSource->setParameters(voltageRef, srcFreq);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(voltageRef),
 				Logger::realToString(srcFreq));
@@ -127,7 +127,7 @@ void SP::Ph1::NetworkInjection::initializeFromNodesAndTerminals(Real frequency) 
 
 // #### MNA functions ####
 void SP::Ph1::NetworkInjection::mnaParentApplyRightSideVectorStamp(Matrix& rightVector) {
-	mSLog->debug("Right Side Vector: {:s}",
+	SPDLOG_LOGGER_DEBUG(mSLog, "Right Side Vector: {:s}",
 				Logger::matrixToString(rightVector));
 }
 
@@ -138,7 +138,7 @@ void SP::Ph1::NetworkInjection::mnaParentAddPreStepDependencies(AttributeBase::L
 }
 
 void SP::Ph1::NetworkInjection::mnaParentPreStep(Real time, Int timeStepCount) {
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
 void SP::Ph1::NetworkInjection::mnaParentAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
@@ -148,15 +148,15 @@ void SP::Ph1::NetworkInjection::mnaParentAddPostStepDependencies(AttributeBase::
 }
 
 void SP::Ph1::NetworkInjection::mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateCurrent(**leftVector);
-	mnaUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+	mnaCompUpdateVoltage(**leftVector);
 }
 
-void SP::Ph1::NetworkInjection::mnaUpdateVoltage(const Matrix& leftVector) {
+void SP::Ph1::NetworkInjection::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	**mIntfVoltage = **mSubVoltageSource->mIntfVoltage;
 }
 
-void SP::Ph1::NetworkInjection::mnaUpdateCurrent(const Matrix& leftVector) {
+void SP::Ph1::NetworkInjection::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = **mSubVoltageSource->mIntfCurrent;
 }
 

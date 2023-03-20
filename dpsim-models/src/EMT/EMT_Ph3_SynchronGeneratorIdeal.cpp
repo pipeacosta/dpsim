@@ -13,7 +13,7 @@ using namespace CPS;
 
 EMT::Ph3::SynchronGeneratorIdeal::SynchronGeneratorIdeal(String uid, String name, Logger::Level logLevel, CPS::GeneratorType sourceType)
 	: CompositePowerComp<Real>(uid, name, true, true, logLevel),
-	mRefVoltage(Attribute<MatrixComp>::createDynamic("V_ref", mAttributes)) {
+	mRefVoltage(mAttributes->createDynamic<MatrixComp>("V_ref")) {
 	mPhaseType = PhaseType::ABC;
 	mSourceType = sourceType;
 
@@ -59,7 +59,7 @@ void EMT::Ph3::SynchronGeneratorIdeal::initializeFromNodesAndTerminals(Real freq
 	if (mSourceType == CPS::GeneratorType::IdealVoltageSource)
 		mRefVoltage->setReference(mSubComponents[0]->attributeTyped<MatrixComp>("V_ref"));
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Initialization from powerflow ---"
 		"\nTerminal 0 voltage: {:s}"
 		"\nTerminal 0 power: {:s}"
@@ -75,7 +75,7 @@ void EMT::Ph3::SynchronGeneratorIdeal::mnaParentAddPreStepDependencies(Attribute
 }
 
 void EMT::Ph3::SynchronGeneratorIdeal::mnaParentPreStep(Real time, Int timeStepCount) {
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
 void EMT::Ph3::SynchronGeneratorIdeal::mnaParentAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
@@ -85,15 +85,15 @@ void EMT::Ph3::SynchronGeneratorIdeal::mnaParentAddPostStepDependencies(Attribut
 }
 
 void EMT::Ph3::SynchronGeneratorIdeal::mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateCurrent(**leftVector);
-	mnaUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+	mnaCompUpdateVoltage(**leftVector);
 }
 
-void EMT::Ph3::SynchronGeneratorIdeal::mnaUpdateCurrent(const Matrix& leftvector) {
+void EMT::Ph3::SynchronGeneratorIdeal::mnaCompUpdateCurrent(const Matrix& leftvector) {
 	**mIntfCurrent = **mSubComponents[0]->mIntfCurrent;
 }
 
-void EMT::Ph3::SynchronGeneratorIdeal::mnaUpdateVoltage(const Matrix& leftVector) {
+void EMT::Ph3::SynchronGeneratorIdeal::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	**mIntfVoltage = **mSubComponents[0]->mIntfVoltage;
 }
 

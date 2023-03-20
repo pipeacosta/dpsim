@@ -11,15 +11,15 @@
 
 using namespace CPS;
 
-Signal::Exciter::Exciter(const String & name, CPS::Logger::Level logLevel) 
+Signal::Exciter::Exciter(const String& name, CPS::Logger::Level logLevel)
 	: SimSignalComp(name, name, logLevel),
-	mVm(Attribute<Real>::create("Vm", mAttributes, 0)),
-	mVh(Attribute<Real>::create("Vh", mAttributes, 0)),
-	mVis(Attribute<Real>::create("Vis", mAttributes, 0)),
-	mVse(Attribute<Real>::create("Vse", mAttributes, 0)),
-	mVr(Attribute<Real>::create("Vr", mAttributes, 0)),
-	mEf(Attribute<Real>::create("Ef", mAttributes, 0)) { }
-	
+	mVm(mAttributes->create<Real>("Vm", 0)),
+	mVh(mAttributes->create<Real>("Vh", 0)),
+	mVis(mAttributes->create<Real>("Vis", 0)),
+	mVse(mAttributes->create<Real>("Vse", 0)),
+	mVr(mAttributes->create<Real>("Vr", 0)),
+	mEf(mAttributes->create<Real>("Ef", 0)) { }
+
 void Signal::Exciter::setParameters(Real Ta, Real Ka, Real Te, Real Ke,
 	Real Tf, Real Kf, Real Tr, Real maxVr, Real minVr) {
 	mTa = Ta;
@@ -32,7 +32,7 @@ void Signal::Exciter::setParameters(Real Ta, Real Ka, Real Te, Real Ke,
 	mMaxVr = maxVr;
 	mMinVr = minVr;
 
-	mSLog->info("Exciter parameters: \n"
+	SPDLOG_LOGGER_INFO(mSLog, "Exciter parameters: \n"
 				"Ta: {:e}"
 				"\nKa: {:e}"
 				"\nTe: {:e}"
@@ -42,7 +42,7 @@ void Signal::Exciter::setParameters(Real Ta, Real Ka, Real Te, Real Ke,
 				"\nTr: {:e}"
 				"\nMaximum regulator Voltage: {:e}"
 				"\nMinimum regulator Voltage: {:e}\n",
-				mTa, mKa, 
+				mTa, mKa,
 				mTe, mKe,
 				mTf, mKf,
 				mTr,
@@ -51,8 +51,8 @@ void Signal::Exciter::setParameters(Real Ta, Real Ka, Real Te, Real Ke,
 }
 
 void Signal::Exciter::initialize(Real Vh_init, Real Ef_init) {
-	
-	mSLog->info("Initially set excitation system initial values: \n"
+
+	SPDLOG_LOGGER_INFO(mSLog, "Initially set excitation system initial values: \n"
 				"Vh_init: {:e}\nEf_init: {:e}\n",
 				Vh_init, Ef_init);
 
@@ -74,17 +74,17 @@ void Signal::Exciter::initialize(Real Vh_init, Real Ef_init) {
 		**mVr = mMinVr;
 
 	mVref = **mVr /  mKa + **mVm;
-	mSLog->info("Actually applied excitation system initial values:"
+	SPDLOG_LOGGER_INFO(mSLog, "Actually applied excitation system initial values:"
 				"\nVref : {:e}"
 				"\ninit_Vm: {:e}"
 				"\ninit_Ef: {:e}"
 				"\ninit_Vc: {:e}"
-				"\ninit_Vr: {:e}"				
+				"\ninit_Vr: {:e}"
 				"\ninit_Vr2: {:e}",
 				mVref,
-				**mVm, 
+				**mVm,
 				**mEf,
-				**mVse, 
+				**mVse,
 				**mVr,
 				**mVis);
 }
@@ -118,7 +118,7 @@ Real Signal::Exciter::step(Real mVd, Real mVq, Real dt) {
 
 	// Exciter equation
 	**mEf = Math::StateSpaceEuler(mEf_prev, - mKe / mTe, 1. / mTe, dt, mVr_prev - **mVse);
-	
+
 	return **mEf;
 }
 

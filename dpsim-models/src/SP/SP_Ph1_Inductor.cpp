@@ -11,7 +11,7 @@
 using namespace CPS;
 
 SP::Ph1::Inductor::Inductor(String uid, String name, Logger::Level logLevel)
-	: Base::Ph1::Inductor(mAttributes), SimPowerComp<Complex>(uid, name, logLevel) {
+	: MNASimPowerComp<Complex>(uid, name, false, true, logLevel), Base::Ph1::Inductor(mAttributes) {
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
 	**mIntfCurrent = MatrixComp::Zero(1, 1);
 	setTerminalNumber(2);
@@ -30,11 +30,11 @@ void SP::Ph1::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 	(**mIntfVoltage)(0, 0) = initialSingleVoltage(1) - initialSingleVoltage(0);
 	**mIntfCurrent = mSusceptance * **mIntfVoltage;
 
-	mSLog->info("\nInductance [H]: {:s}"
+	SPDLOG_LOGGER_INFO(mSLog, "\nInductance [H]: {:s}"
 				"\nImpedance [Ohm]: {:s}",
 				Logger::realToString(**mInductance),
 				Logger::complexToString(1./mSusceptance));
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -49,12 +49,10 @@ void SP::Ph1::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 
 // #### MNA section ####
 
-void SP::Ph1::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
+void SP::Ph1::Inductor::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
-	**mRightVector = Matrix::Zero(leftVector->get().rows(), 1);
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- MNA initialization ---"
 		"\nInitial voltage {:s}"
 		"\nInitial current {:s}"
@@ -63,7 +61,7 @@ void SP::Ph1::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matri
 		Logger::phasorToString((**mIntfCurrent)(0, 0)));
 }
 
-void SP::Ph1::Inductor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void SP::Ph1::Inductor::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	if (terminalNotGrounded(0)) {
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0), matrixNodeIndex(0), mSusceptance);
 	}
@@ -76,33 +74,33 @@ void SP::Ph1::Inductor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 
 	}
 
-	mSLog->info("-- Matrix Stamp ---");
+	SPDLOG_LOGGER_INFO(mSLog, "-- Matrix Stamp ---");
 	if (terminalNotGrounded(0))
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			mSusceptance.real(), mSusceptance.imag(), matrixNodeIndex(0), matrixNodeIndex(0));
 	if (terminalNotGrounded(1))
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			mSusceptance.real(), mSusceptance.imag(), matrixNodeIndex(1), matrixNodeIndex(1));
 	if (terminalNotGrounded(0) && terminalNotGrounded(1)) {
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			-mSusceptance.real(), -mSusceptance.imag(), matrixNodeIndex(0), matrixNodeIndex(1));
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			-mSusceptance.real(), -mSusceptance.imag(), matrixNodeIndex(1), matrixNodeIndex(0));
 	}
 }
 
-void SP::Ph1::Inductor::mnaAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+void SP::Ph1::Inductor::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
 	attributeDependencies.push_back(leftVector);
-	modifiedAttributes.push_back(this->attribute("v_intf"));
-	modifiedAttributes.push_back(this->attribute("i_intf"));
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void SP::Ph1::Inductor::mnaPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+void SP::Ph1::Inductor::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
 	this->mnaUpdateVoltage(**leftVector);
 	this->mnaUpdateCurrent(**leftVector);
 }
 
-void SP::Ph1::Inductor::mnaUpdateVoltage(const Matrix& leftVector) {
+void SP::Ph1::Inductor::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// v1 - v0
 	**mIntfVoltage = Matrix::Zero(3, 1);
 	if (terminalNotGrounded(1)) {
@@ -113,13 +111,13 @@ void SP::Ph1::Inductor::mnaUpdateVoltage(const Matrix& leftVector) {
 	}
 }
 
-void SP::Ph1::Inductor::mnaUpdateCurrent(const Matrix& leftVector) {
+void SP::Ph1::Inductor::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = mSusceptance * **mIntfVoltage;
 }
 
 
 // #### Tear Methods ####
-void SP::Ph1::Inductor::mnaTearApplyMatrixStamp(Matrix& tearMatrix) {
+void SP::Ph1::Inductor::mnaTearApplyMatrixStamp(SparseMatrixRow& tearMatrix) {
 	Math::addToMatrixElement(tearMatrix, mTearIdx, mTearIdx, 1. / mSusceptance);
 }
 

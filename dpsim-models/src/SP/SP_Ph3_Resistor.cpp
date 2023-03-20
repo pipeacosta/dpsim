@@ -13,7 +13,7 @@ using namespace CPS;
 
 SP::Ph3::Resistor::Resistor(String uid, String name,
 	Logger::Level logLevel)
-	: Base::Ph3::Resistor(mAttributes), SimPowerComp<Complex>(uid, name, logLevel) {
+	: MNASimPowerComp<Complex>(uid, name, false, true, logLevel), Base::Ph3::Resistor(mAttributes) {
 	mPhaseType = PhaseType::ABC;
 	setTerminalNumber(2);
 	**mIntfVoltage = MatrixComp::Zero(3, 1);
@@ -38,20 +38,20 @@ void SP::Ph3::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 		voltMag * sin(voltPhase + 2. / 3. * M_PI));
 	**mIntfCurrent = (**mResistance).inverse() * **mIntfVoltage;
 
-	mSLog->info("Node 1 : {}", Logger::phasorToString(initialVoltage(0)(0, 0)));
-	mSLog->info("Node 2 : {}", Logger::phasorToString(initialVoltage(1)(0, 0)));
-	mSLog->info("initialize {} {} voltage to {} and current to {}",
+	SPDLOG_LOGGER_INFO(mSLog, "Node 1 : {}", Logger::phasorToString(initialVoltage(0)(0, 0)));
+	SPDLOG_LOGGER_INFO(mSLog, "Node 2 : {}", Logger::phasorToString(initialVoltage(1)(0, 0)));
+	SPDLOG_LOGGER_INFO(mSLog, "initialize {} {} voltage to {} and current to {}",
 		this->type(), this->name(),
 		Logger::phasorToString((**mIntfVoltage)(0, 0)),
 		Logger::phasorToString((**mIntfCurrent)(0, 0)));
 }
 
-void SP::Ph3::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
+void SP::Ph3::Resistor::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
+	**mRightVector = Matrix::Zero(0, 0);
 }
 
-void SP::Ph3::Resistor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void SP::Ph3::Resistor::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 
 	Matrix conductance = (**mResistance).inverse();
 
@@ -114,12 +114,18 @@ void SP::Ph3::Resistor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 	}*/
 }
 
-void SP::Ph3::Resistor::MnaPostStep::execute(Real time, Int timeStepCount) {
-	mResistor.mnaUpdateVoltage(**mLeftVector);
-	mResistor.mnaUpdateCurrent(**mLeftVector);
+void SP::Ph3::Resistor::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+	attributeDependencies.push_back(leftVector);
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void SP::Ph3::Resistor::mnaUpdateVoltage(const Matrix& leftVector) {
+void SP::Ph3::Resistor::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+}
+
+void SP::Ph3::Resistor::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// Voltage across component is defined as V1 - V0
 	**mIntfVoltage = MatrixComp::Zero(3, 1);
 	if (terminalNotGrounded(1)) {
@@ -137,14 +143,14 @@ void SP::Ph3::Resistor::mnaUpdateVoltage(const Matrix& leftVector) {
 	//	<< "<" << std::arg((**mIntfVoltage)(0, 0)) << std::endl;
 }
 
-void SP::Ph3::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
+void SP::Ph3::Resistor::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = (**mResistance).inverse() * **mIntfVoltage;
 	//mLog.debug() << "Current A: " << std::abs((**mIntfCurrent)(0, 0))
 	//	<< "<" << std::arg((**mIntfCurrent)(0, 0)) << std::endl;
 }
 
 
-void SP::Ph3::Resistor::mnaTearApplyMatrixStamp(Matrix& tearMatrix) {
+void SP::Ph3::Resistor::mnaTearApplyMatrixStamp(SparseMatrixRow& tearMatrix) {
 	// TODO
 	Math::addToMatrixElement(tearMatrix, mTearIdx, mTearIdx, Complex((**mResistance)(0, 0), 0));
 	Math::addToMatrixElement(tearMatrix, mTearIdx, mTearIdx, Complex((**mResistance)(1, 1), 0));

@@ -88,7 +88,7 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.def("set_tearing_components", &DPsim::Simulation::setTearingComponents)
 		.def("add_event", &DPsim::Simulation::addEvent)
 		.def("set_solver_component_behaviour", &DPsim::Simulation::setSolverAndComponentBehaviour)
-		.def("set_mna_solver_implementation", &DPsim::Simulation::setMnaSolverImplementation);
+		.def("set_direct_solver_implementation", &DPsim::Simulation::setDirectLinearSolverImplementation);
 
 	py::class_<DPsim::RealTimeSimulation, DPsim::Simulation>(m, "RealTimeSimulation")
 		.def(py::init<std::string, CPS::Logger::Level>(), "name"_a, "loglevel"_a = CPS::Logger::Level::info)
@@ -133,11 +133,11 @@ PYBIND11_MODULE(dpsimpy, m) {
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.
 		.def("log_attribute", py::overload_cast<const std::vector<CPS::String>&, CPS::AttributeBase::Ptr>(&DPsim::DataLogger::logAttribute), "names"_a, "attr"_a)
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.
-		.def("log_attribute", [](DPsim::DataLogger &logger, const CPS::String &name, const CPS::String &attr, CPS::IdentifiedObject &comp, CPS::UInt rowsMax, CPS::UInt colsMax) {
+		.def("log_attribute", [](DPsim::DataLogger &logger, const CPS::String &name, const CPS::String &attr, const CPS::IdentifiedObject &comp, CPS::UInt rowsMax, CPS::UInt colsMax) {
 			logger.logAttribute(name, comp.attribute(attr), rowsMax, colsMax);
 		}, "name"_a, "attr"_a, "comp"_a, "rows_max"_a = 0, "cols_max"_a = 0)
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.;
-		.def("log_attribute", [](DPsim::DataLogger &logger, const std::vector<CPS::String> &names, const CPS::String &attr, CPS::IdentifiedObject &comp) {
+		.def("log_attribute", [](DPsim::DataLogger &logger, const std::vector<CPS::String> &names, const CPS::String &attr, const CPS::IdentifiedObject &comp) {
 			logger.logAttribute(names, comp.attribute(attr));
 		});
 
@@ -179,6 +179,12 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.value("PVNode", CPS::GeneratorType::PVNode)
 		.value("TransientStability", CPS::GeneratorType::TransientStability)
 		.value("IdealVoltageSource", CPS::GeneratorType::IdealVoltageSource)
+		.value("SG3OrderVBR", CPS::GeneratorType::SG3OrderVBR)
+		.value("SG4OrderVBR", CPS::GeneratorType::SG4OrderVBR)
+		.value("SG6aOrderVBR", CPS::GeneratorType::SG6aOrderVBR)
+		.value("SG6bOrderVBR", CPS::GeneratorType::SG6bOrderVBR)
+		.value("FullOrderVBR", CPS::GeneratorType::FullOrderVBR)
+		.value("FullOrder", CPS::GeneratorType::FullOrder)
 		.value("NONE", CPS::GeneratorType::None);
 
 	py::enum_<DPsim::Solver::Type>(m, "Solver")
@@ -186,13 +192,14 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.value("DAE", DPsim::Solver::Type::DAE)
 		.value("NRP", DPsim::Solver::Type::NRP);
 
-	py::enum_<DPsim::MnaSolverFactory::MnaSolverImpl>(m, "MnaSolverImpl")
-		.value("Undef", DPsim::MnaSolverFactory::MnaSolverImpl::Undef)
-		.value("EigenDense", DPsim::MnaSolverFactory::MnaSolverImpl::EigenDense)
-		.value("EigenSparse", DPsim::MnaSolverFactory::MnaSolverImpl::EigenSparse)
-		.value("CUDADense", DPsim::MnaSolverFactory::MnaSolverImpl::CUDADense)
-		.value("CUDASparse", DPsim::MnaSolverFactory::MnaSolverImpl::CUDASparse)
-		.value("CUDAMagma", DPsim::MnaSolverFactory::MnaSolverImpl::CUDAMagma);
+	py::enum_<DPsim::DirectLinearSolverImpl>(m, "DirectLinearSolverImpl")
+		.value("Undef", DPsim::DirectLinearSolverImpl::Undef)
+		.value("DenseLU", DPsim::DirectLinearSolverImpl::DenseLU)
+		.value("SparseLU", DPsim::DirectLinearSolverImpl::SparseLU)
+		.value("KLU", DPsim::DirectLinearSolverImpl::KLU)
+		.value("CUDADense", DPsim::DirectLinearSolverImpl::CUDADense)
+		.value("CUDASparse", DPsim::DirectLinearSolverImpl::CUDASparse)
+		.value("CUDAMagma", DPsim::DirectLinearSolverImpl::CUDAMagma);
 
 	py::enum_<CPS::CSVReader::Mode>(m, "CSVReaderMode")
 		.value("AUTO", CPS::CSVReader::Mode::AUTO)

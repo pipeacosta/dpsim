@@ -14,7 +14,7 @@ using namespace CPS;
 // !!! 			with initialization from phase-to-phase RMS variables
 
 EMT::Ph3::SeriesSwitch::SeriesSwitch(String uid, String name, Logger::Level logLevel)
-	: Base::Ph1::Switch(mAttributes), SimPowerComp<Real>(uid, name, logLevel) {
+	: MNASimPowerComp<Real>(uid, name, false, true, logLevel), Base::Ph1::Switch(mAttributes) {
 	mPhaseType = PhaseType::ABC;
 	setTerminalNumber(2);
 }
@@ -37,7 +37,7 @@ void EMT::Ph3::SeriesSwitch::initializeFromNodesAndTerminals(Real frequency) {
 
 	**mIntfCurrent = **mIntfVoltage / impedance;
 
-	mSLog->info("\n--- Initialization from powerflow ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Initialization from powerflow ---"
 		"\nVoltage across amplitude and phase: \n{}"
 		"\nCurrent amplitude and phase: \n{}"
 		"\nTerminal 0 voltage amplitude and phase: \n{}"
@@ -49,16 +49,14 @@ void EMT::Ph3::SeriesSwitch::initializeFromNodesAndTerminals(Real frequency) {
 		Logger::phasorMatrixToString(initialVoltage(1)));
 }
 
-void EMT::Ph3::SeriesSwitch::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
-	MNAInterface::mnaInitialize(omega, timeStep);
+void EMT::Ph3::SeriesSwitch::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
+	**mRightVector = Matrix::Zero(0, 0);
 }
 
 Bool EMT::Ph3::SeriesSwitch::mnaIsClosed() { return **mIsClosed; }
 
-void EMT::Ph3::SeriesSwitch::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void EMT::Ph3::SeriesSwitch::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	Real conductance = (**mIsClosed)
 		? 1. / **mClosedResistance
 		: 1. / **mOpenResistance;
@@ -75,16 +73,16 @@ void EMT::Ph3::SeriesSwitch::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 	}
 
 	if (terminalNotGrounded(0))
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
 	if (terminalNotGrounded(1))
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(1)[0], matrixNodeIndices(1)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(1)[0], matrixNodeIndices(1)[0]);
 	if (terminalNotGrounded(0) && terminalNotGrounded(1)) {
-		mSLog->info("Add {} to {}, {}", -conductance, matrixNodeIndices(0)[0], matrixNodeIndices(1)[0]);
-		mSLog->info("Add {} to {}, {}", -conductance, matrixNodeIndices(1)[0], matrixNodeIndices(0)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", -conductance, matrixNodeIndices(0)[0], matrixNodeIndices(1)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", -conductance, matrixNodeIndices(1)[0], matrixNodeIndices(0)[0]);
 	}
 }
 
-void EMT::Ph3::SeriesSwitch::mnaApplySwitchSystemMatrixStamp(Bool closed, Matrix& systemMatrix, Int freqIdx) {
+void EMT::Ph3::SeriesSwitch::mnaCompApplySwitchSystemMatrixStamp(Bool closed, SparseMatrixRow& systemMatrix, Int freqIdx) {
 	Real conductance = (closed)
 		? 1. / **mClosedResistance
 		: 1. / **mOpenResistance;
@@ -101,21 +99,27 @@ void EMT::Ph3::SeriesSwitch::mnaApplySwitchSystemMatrixStamp(Bool closed, Matrix
 	}
 
 	if (terminalNotGrounded(0))
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
 	if (terminalNotGrounded(1))
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(1)[0], matrixNodeIndices(1)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(1)[0], matrixNodeIndices(1)[0]);
 	if (terminalNotGrounded(0) && terminalNotGrounded(1)) {
-		mSLog->info("Add {} to {}, {}", -conductance, matrixNodeIndices(0)[0], matrixNodeIndices(1)[0]);
-		mSLog->info("Add {} to {}, {}", -conductance, matrixNodeIndices(1)[0], matrixNodeIndices(0)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", -conductance, matrixNodeIndices(0)[0], matrixNodeIndices(1)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", -conductance, matrixNodeIndices(1)[0], matrixNodeIndices(0)[0]);
 	}
 }
 
-void EMT::Ph3::SeriesSwitch::MnaPostStep::execute(Real time, Int timeStepCount) {
-	mSwitch.mnaUpdateVoltage(**mLeftVector);
-	mSwitch.mnaUpdateCurrent(**mLeftVector);
+void EMT::Ph3::SeriesSwitch::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+	attributeDependencies.push_back(leftVector);
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void EMT::Ph3::SeriesSwitch::mnaUpdateVoltage(const Matrix& leftVector) {
+void EMT::Ph3::SeriesSwitch::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+}
+
+void EMT::Ph3::SeriesSwitch::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// Voltage across component is defined as V1 - V0
 	**mIntfVoltage = Matrix::Zero(3,1);
 	if (terminalNotGrounded(1)) {
@@ -132,7 +136,7 @@ void EMT::Ph3::SeriesSwitch::mnaUpdateVoltage(const Matrix& leftVector) {
 	SPDLOG_LOGGER_DEBUG(mSLog, "Voltage A: {}", (**mIntfVoltage)(0,0));
 }
 
-void EMT::Ph3::SeriesSwitch::mnaUpdateCurrent(const Matrix& leftVector) {
+void EMT::Ph3::SeriesSwitch::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	Real impedance = (**mIsClosed)? **mClosedResistance : **mOpenResistance;
 	**mIntfCurrent = **mIntfVoltage / impedance;
 

@@ -16,7 +16,7 @@ using namespace CPS;
 using namespace std;
 
 DP::Ph3::SynchronGeneratorDQ::SynchronGeneratorDQ(String uid, String name, Logger::Level logLevel)
-	: Base::SynchronGenerator(mAttributes), SimPowerComp<Complex>(uid, name, logLevel) {
+	: MNASimPowerComp<Complex>(uid, name, true, true, logLevel), Base::SynchronGenerator(mAttributes) {
 	mPhaseType = PhaseType::ABC;
 	setTerminalNumber(1);
 	**mIntfVoltage = MatrixComp::Zero(3,1);
@@ -75,7 +75,7 @@ void DP::Ph3::SynchronGeneratorDQ::initialize(Matrix frequencies) {
 	**mIntfCurrent = mBase_I * dq0ToAbcTransform(mThetaMech, mIdq0);
 }
 
-void DP::Ph3::SynchronGeneratorDQ::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void DP::Ph3::SynchronGeneratorDQ::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	if (!mCompensationOn)
 		return;
 
@@ -85,13 +85,13 @@ void DP::Ph3::SynchronGeneratorDQ::mnaApplySystemMatrixStamp(Matrix& systemMatri
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0], Complex(conductance, 0));
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndices(0)[1], matrixNodeIndices(0)[1], Complex(conductance, 0));
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndices(0)[2], matrixNodeIndices(0)[2], Complex(conductance, 0));
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(0)[1], matrixNodeIndices(0)[1]);
-		mSLog->info("Add {} to {}, {}", conductance, matrixNodeIndices(0)[2], matrixNodeIndices(0)[2]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(0)[0], matrixNodeIndices(0)[0]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(0)[1], matrixNodeIndices(0)[1]);
+		SPDLOG_LOGGER_INFO(mSLog, "Add {} to {}, {}", conductance, matrixNodeIndices(0)[2], matrixNodeIndices(0)[2]);
 	}
 }
 
-void DP::Ph3::SynchronGeneratorDQ::mnaApplyRightSideVectorStamp(Matrix& rightVector) {
+void DP::Ph3::SynchronGeneratorDQ::mnaCompApplyRightSideVectorStamp(Matrix& rightVector) {
 	if (mCompensationOn)
 		mCompensationCurrent = **mIntfVoltage / mRcomp;
 
@@ -105,14 +105,19 @@ void DP::Ph3::SynchronGeneratorDQ::mnaApplyRightSideVectorStamp(Matrix& rightVec
 	}
 }
 
-void DP::Ph3::SynchronGeneratorDQ::mnaUpdateVoltage(const Matrix& leftVector) {
+void DP::Ph3::SynchronGeneratorDQ::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	(**mIntfVoltage)(0,0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(0,0));
 	(**mIntfVoltage)(1,0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(0,1));
 	(**mIntfVoltage)(2,0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(0,2));
 }
 
-void DP::Ph3::SynchronGeneratorDQ::MnaPostStep::execute(Real time, Int timeStepCount) {
-	mSynGen.mnaUpdateVoltage(**mLeftVector);
+void DP::Ph3::SynchronGeneratorDQ::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+	attributeDependencies.push_back(leftVector);
+	modifiedAttributes.push_back(mIntfVoltage);
+}
+
+void DP::Ph3::SynchronGeneratorDQ::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateVoltage(**leftVector);
 }
 
 Real DP::Ph3::SynchronGeneratorDQ::electricalTorque() const { return **mElecTorque * mBase_T; }

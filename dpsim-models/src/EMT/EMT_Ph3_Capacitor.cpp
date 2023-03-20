@@ -11,7 +11,7 @@
 using namespace CPS;
 
 EMT::Ph3::Capacitor::Capacitor(String uid, String name, Logger::Level logLevel)
-	: Base::Ph3::Capacitor(mAttributes), SimPowerComp<Real>(uid, name, logLevel) {
+	: MNASimPowerComp<Real>(uid, name, true, true, logLevel), Base::Ph3::Capacitor(mAttributes) {
 	mPhaseType = PhaseType::ABC;
 	setTerminalNumber(2);
 	mEquivCurrent = Matrix::Zero(3, 1);
@@ -41,11 +41,11 @@ void EMT::Ph3::Capacitor::initializeFromNodesAndTerminals(Real frequency) {
 	**mIntfVoltage = vInitABC.real();
 	**mIntfCurrent = (admittance * vInitABC).real();
 
-	mSLog->info("\nCapacitance [F]: {:s}"
+	SPDLOG_LOGGER_INFO(mSLog, "\nCapacitance [F]: {:s}"
 				"\nAdmittance [S]: {:s}",
 				Logger::matrixToString(**mCapacitance),
 				Logger::matrixCompToString(admittance));
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -58,20 +58,14 @@ void EMT::Ph3::Capacitor::initializeFromNodesAndTerminals(Real frequency) {
 		Logger::phasorToString(RMS3PH_TO_PEAK1PH * initialSingleVoltage(1)));
 }
 
-void EMT::Ph3::Capacitor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
-	MNAInterface::mnaInitialize(omega, timeStep);
-	updateMatrixNodeIndices();
+void EMT::Ph3::Capacitor::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
+		updateMatrixNodeIndices();
 	mEquivCond = (2.0 * **mCapacitance) / timeStep;
 	// Update internal state
 	mEquivCurrent = - **mIntfCurrent + - mEquivCond * **mIntfVoltage;
-
-	**mRightVector = Matrix::Zero(leftVector->get().rows(), 1);
-	mMnaTasks.push_back(std::make_shared<MnaPreStep>(*this));
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
-
 }
 
-void EMT::Ph3::Capacitor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void EMT::Ph3::Capacitor::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	if (terminalNotGrounded(0)) {
 		// set upper left block, 3x3 entries
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0, 0), matrixNodeIndex(0, 0), mEquivCond(0, 0));
@@ -120,12 +114,12 @@ void EMT::Ph3::Capacitor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(1, 2), matrixNodeIndex(0, 2), -mEquivCond(2, 2));
 	}
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 			"\nEquivalent Conductance: {:s}",
 			Logger::matrixToString(mEquivCond));
 }
 
-void EMT::Ph3::Capacitor::mnaApplyRightSideVectorStamp(Matrix& rightVector) {
+void EMT::Ph3::Capacitor::mnaCompApplyRightSideVectorStamp(Matrix& rightVector) {
 	mEquivCurrent = -**mIntfCurrent + -mEquivCond * **mIntfVoltage;
 	if (terminalNotGrounded(0)) {
 		Math::setVectorElement(rightVector, matrixNodeIndex(0, 0), mEquivCurrent(0, 0));
@@ -137,34 +131,34 @@ void EMT::Ph3::Capacitor::mnaApplyRightSideVectorStamp(Matrix& rightVector) {
 		Math::setVectorElement(rightVector, matrixNodeIndex(1, 1), -mEquivCurrent(1, 0));
 		Math::setVectorElement(rightVector, matrixNodeIndex(1, 2), -mEquivCurrent(2, 0));
 	}
-	mSLog->debug(
+	SPDLOG_LOGGER_DEBUG(mSLog,
 		"\nEquivalent Current: {:s}",
 		Logger::matrixToString(mEquivCurrent));
 }
 
-void EMT::Ph3::Capacitor::mnaAddPreStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes) {
+void EMT::Ph3::Capacitor::mnaCompAddPreStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes) {
 	// actually depends on C, but then we'd have to modify the system matrix anyway
-	prevStepDependencies.push_back(attribute("i_intf"));
-	prevStepDependencies.push_back(attribute("v_intf"));
-	modifiedAttributes.push_back(attribute("right_vector"));
+	prevStepDependencies.push_back(mIntfCurrent);
+	prevStepDependencies.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mRightVector);
 }
 
-void EMT::Ph3::Capacitor::mnaPreStep(Real time, Int timeStepCount) {
-	mnaApplyRightSideVectorStamp(**mRightVector);
+void EMT::Ph3::Capacitor::mnaCompPreStep(Real time, Int timeStepCount) {
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
-void EMT::Ph3::Capacitor::mnaAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+void EMT::Ph3::Capacitor::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
 	attributeDependencies.push_back(leftVector);
-	modifiedAttributes.push_back(attribute("v_intf"));
-	modifiedAttributes.push_back(attribute("i_intf"));
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void EMT::Ph3::Capacitor::mnaPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateVoltage(**leftVector);
-	mnaUpdateCurrent(**leftVector);
+void EMT::Ph3::Capacitor::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
 }
 
-void EMT::Ph3::Capacitor::mnaUpdateVoltage(const Matrix& leftVector) {
+void EMT::Ph3::Capacitor::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// v1 - v0
 	**mIntfVoltage = Matrix::Zero(3,1);
 	if (terminalNotGrounded(1)) {
@@ -179,9 +173,9 @@ void EMT::Ph3::Capacitor::mnaUpdateVoltage(const Matrix& leftVector) {
 	}
 }
 
-void EMT::Ph3::Capacitor::mnaUpdateCurrent(const Matrix& leftVector) {
+void EMT::Ph3::Capacitor::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = mEquivCond * **mIntfVoltage + mEquivCurrent;
-	mSLog->debug(
+	SPDLOG_LOGGER_DEBUG(mSLog,
 		"\nCurrent: {:s}",
 		Logger::matrixToString(**mIntfCurrent)
 	);

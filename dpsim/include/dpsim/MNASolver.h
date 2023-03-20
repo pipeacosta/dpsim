@@ -34,7 +34,7 @@
 namespace DPsim {
 	/// Solver class using Modified Nodal Analysis (MNA).
 	template <typename VarType>
-	class MnaSolver : public Solver, public CPS::AttributeList {
+	class MnaSolver : public Solver {
 	protected:
 		// #### General simulation settings ####
 		/// Simulation domain, which can be dynamic phasor (DP) or EMT
@@ -109,6 +109,13 @@ namespace DPsim {
 		std::shared_ptr<DataLogger> mLeftVectorLog;
 		/// Right side vector logger
 		std::shared_ptr<DataLogger> mRightVectorLog;
+
+		/// LU factorization measurements
+		std::vector<Real> mFactorizeTimes;
+		/// Right-hand side solution measurements
+		std::vector<Real> mSolveTimes;
+		/// LU refactorization measurements
+		std::vector<Real> mRecomputationTimes;
 
 		/// Constructor should not be called by users but by Simulation
 		MnaSolver(String name,
@@ -185,9 +192,9 @@ namespace DPsim {
 		std::vector<CPS::Attribute<Matrix>::Ptr> mLeftSideVectorHarm;
 
 		/// Destructor
-		virtual ~MnaSolver() { 
+		virtual ~MnaSolver() {
 			if (mSystemMatrixRecomputation)
-				mSLog->info("Number of system matrix recomputations: {:}", mNumRecomputations);
+				SPDLOG_LOGGER_INFO(mSLog, "Number of system matrix recomputations: {:}", mNumRecomputations);
 		};
 
 		/// Calls subroutines to set up everything that is required before simulation
