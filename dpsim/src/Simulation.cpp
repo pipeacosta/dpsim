@@ -171,8 +171,11 @@ void Simulation::sync() const {
 
 	for (auto intf : mInterfaces) {
 		intf->syncExports();
+		mLog->info("Synchronization step 1: syncExports completed!");
 		intf->syncImports();
+		mLog->info("Synchronization step 2: syncImports completed!");
 		intf->syncExports();
+		mLog->info("Synchronization step 3: syncExports completed!");
 	}
 
 	mLog->info("Synchronized simulation start with remotes");

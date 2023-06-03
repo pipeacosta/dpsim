@@ -25,7 +25,7 @@ SimPowerComp<Real>::Ptr EMT::Ph1::Inductor::clone(String name) {
 }
 
 void EMT::Ph1::Inductor::initializeFromNodesAndTerminals(Real frequency) {
-
+	
 	Real omega = 2 * PI * frequency;
 	Complex impedance = { 0, omega * **mInductance };
 	(**mIntfVoltage)(0,0) = (initialSingleVoltage(1) - initialSingleVoltage(0)).real();
@@ -42,6 +42,7 @@ void EMT::Ph1::Inductor::initializeFromNodesAndTerminals(Real frequency) {
 		(**mIntfCurrent)(0,0),
 		initialSingleVoltage(0).real(),
 		initialSingleVoltage(1).real());
+	mSLog->flush();
 }
 
 void EMT::Ph1::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
@@ -55,6 +56,15 @@ void EMT::Ph1::Inductor::mnaInitialize(Real omega, Real timeStep, Attribute<Matr
 	mMnaTasks.push_back(std::make_shared<MnaPreStep>(*this));
 	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
 	**mRightVector = Matrix::Zero(leftVector->get().rows(), 1);
+
+	mSLog->info(
+		"\n--- Initialization from powerflow ---"
+		"\nVoltage across: {:f}"
+		"\nCurrent: {:f}"
+		"\n--- Initialization from powerflow finished ---",
+		(**mIntfVoltage)(0,0),
+		(**mIntfCurrent)(0,0));
+	mSLog->flush();
 }
 
 void EMT::Ph1::Inductor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {

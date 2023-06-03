@@ -39,6 +39,7 @@ void EMT::Ph1::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 		(**mIntfCurrent)(0,0),
 		initialSingleVoltage(0).real(),
 		initialSingleVoltage(1).real());
+	mSLog->flush();
 }
 
 void EMT::Ph1::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
@@ -46,6 +47,15 @@ void EMT::Ph1::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matr
 	updateMatrixNodeIndices();
 
 	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
+
+	mSLog->info(
+		"\n--- Initialization from powerflow ---"
+		"\nVoltage across: {:f}"
+		"\nCurrent: {:f}"
+		"\n--- Initialization from powerflow finished ---",
+		(**mIntfVoltage)(0,0),
+		(**mIntfCurrent)(0,0));
+	mSLog->flush();
 }
 
 void EMT::Ph1::Resistor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
