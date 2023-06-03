@@ -13,12 +13,12 @@ using namespace CPS;
 DP::Ph1::SynchronGenerator6aOrderVBR::SynchronGenerator6aOrderVBR
     (const String & uid, const String & name, Logger::Level logLevel)
 	: ReducedOrderSynchronGeneratorVBR(uid, name, logLevel),
-	mEdq_t(Attribute<Matrix>::create("Edq_t", mAttributes)),
-	mEdq_s(Attribute<Matrix>::create("Edq_s", mAttributes)) {
+	mEdq_t(mAttributes->create<Matrix>("Edq_t")),
+	mEdq_s(mAttributes->create<Matrix>("Edq_s")) {
 
 	//
 	mSGOrder = SGOrder::SG6aOrder;
-	
+
 	// model specific variables
 	**mEdq_t = Matrix::Zero(2,1);
 	**mEdq_s = Matrix::Zero(2,1);
@@ -41,7 +41,7 @@ void DP::Ph1::SynchronGenerator6aOrderVBR::specificInitialization() {
 	(**mEdq_s)(0,0) = (**mVdq)(0,0) - mLq_s * (**mIdq)(1,0);
 	(**mEdq_s)(1,0) = (**mVdq)(1,0) + mLd_s * (**mIdq)(0,0);
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Model specific initialization  ---"
 		"\nInitial Ed_t (per unit): {:f}"
 		"\nInitial Eq_t (per unit): {:f}"
@@ -71,7 +71,7 @@ void DP::Ph1::SynchronGenerator6aOrderVBR::stepInPerUnit() {
 	// VBR history voltage
 	calculateAuxiliarVariables();
 	calculateConductanceMatrix();
-	
+
 	// calculate history term behind the transient reactance
 	mEh_t(0,0) = mAd_t * (**mIdq)(1,0) + mBd_t * (**mEdq_t)(0,0);
 	mEh_t(1,0) = mAq_t * (**mIdq)(0,0) + mBq_t * (**mEdq_t)(1,0) + mDq_t * (**mEf) + mDq_t * mEf_prev;

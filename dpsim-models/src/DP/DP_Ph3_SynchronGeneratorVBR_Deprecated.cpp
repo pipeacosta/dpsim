@@ -187,7 +187,7 @@ void DP::Ph3::SynchronGeneratorVBR::mnaStep(Matrix& systemMatrix, Matrix& rightV
 	if (mLogLevel != Logger::Level::off) {
 		Matrix logValues(statorCurrents().rows() + dqStatorCurrents().rows() + 3, 1);
 		logValues << statorCurrents()*mBase_I,  dqStatorCurrents(), electricalTorque(), rotationalSpeed(), rotorPosition();
-		mLog->debug(time, logValues);
+		SPDLOG_LOGGER_DEBUG(mLog, time, logValues);
 	}
 }
 
@@ -227,7 +227,7 @@ void DP::Ph3::SynchronGeneratorVBR::stepInPerUnit(Real om, Real dt, Real time, N
 	mISourceEq = R_eq_DP.inverse()*E_eq_DP*mBase_I;
 }
 
-void DP::Ph3::SynchronGeneratorVBR::mnaPostStep(Matrix& rightVector, Matrix& leftVector, Real time) {
+void DP::Ph3::SynchronGeneratorVBR::mnaCompPostStep(Matrix& rightVector, Matrix& leftVector, Real time) {
 	Real dt = mSystemTimeStep;
 
 	if ( terminalNotGrounded(0) ) {

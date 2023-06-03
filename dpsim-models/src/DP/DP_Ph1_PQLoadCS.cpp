@@ -13,9 +13,9 @@ using namespace CPS;
 DP::Ph1::PQLoadCS::PQLoadCS(String uid, String name,
 	Logger::Level logLevel)
 	: CompositePowerComp<Complex>(uid, name, true, true, logLevel),
-	mActivePower(Attribute<Real>::create("P", mAttributes, 0)),
-	mReactivePower(Attribute<Real>::create("Q", mAttributes, 0)),
-	mNomVoltage(Attribute<Real>::create("V_nom", mAttributes)) {
+	mActivePower(mAttributes->create<Real>("P", 0)),
+	mReactivePower(mAttributes->create<Real>("Q", 0)),
+	mNomVoltage(mAttributes->create<Real>("V_nom")) {
 	setTerminalNumber(1);
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
 	**mIntfCurrent = MatrixComp::Zero(1, 1);
@@ -76,7 +76,7 @@ void DP::Ph1::PQLoadCS::initializeFromNodesAndTerminals(Real frequency) {
 	addMNASubComponent(mSubCurrentSource, MNA_SUBCOMP_TASK_ORDER::TASK_AFTER_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, true);
 	updateIntfValues();
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -96,7 +96,7 @@ void DP::Ph1::PQLoadCS::updateSetPoint() {
 	//Complex current = power / (**mIntfVoltage)(0,0);
 
 	**mSubCurrentSource->mCurrentRef = std::conj(current);
-	mSLog->debug(
+	SPDLOG_LOGGER_DEBUG(mSLog, 
 		"\n--- update set points ---"
 		"\npower: {:s}"
 		"\nCurrent: {:s}",
@@ -117,7 +117,7 @@ void DP::Ph1::PQLoadCS::mnaParentAddPostStepDependencies(AttributeBase::List &pr
 
 void DP::Ph1::PQLoadCS::mnaParentPreStep(Real time, Int timeStepCount) {
 	updateSetPoint();
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
 void DP::Ph1::PQLoadCS::updateIntfValues() {

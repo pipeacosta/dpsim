@@ -13,7 +13,7 @@ using namespace CPS;
 EMT::Ph3::SynchronGenerator3OrderVBR::SynchronGenerator3OrderVBR
     (const String & uid, const String & name, Logger::Level logLevel)
 	: ReducedOrderSynchronGeneratorVBR(uid, name, logLevel),
-	mEdq0_t(Attribute<Matrix>::create("Edq0_t", mAttributes)) {
+	mEdq0_t(mAttributes->create<Matrix>("Edq0_t")) {
 
 	//
 	mSGOrder = SGOrder::SG3Order;
@@ -32,7 +32,7 @@ void EMT::Ph3::SynchronGenerator3OrderVBR::specificInitialization() {
 	// initial voltage behind the transient reactance in the dq0 reference frame
 	(**mEdq0_t)(1,0) = (**mVdq0)(1,0) + (**mIdq0)(0,0) * mLd_t;
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog, 
 		"\n--- Model specific initialization  ---"
 		"\nInitial Eq_t (per unit): {:f}"
 		"\n--- Model specific initialization finished ---",

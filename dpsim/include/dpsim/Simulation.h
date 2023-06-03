@@ -88,7 +88,9 @@ namespace DPsim {
 		///
 		Solver::List mSolvers;
 		///
-		MnaSolverFactory::MnaSolverImpl mMnaImpl = MnaSolverFactory::MnaSolverImpl::Undef;
+		DirectLinearSolverImpl mDirectImpl = DirectLinearSolverImpl::Undef;
+		///
+		DirectLinearSolverConfiguration mDirectLinearSolverConfiguration;
 		///
 		Bool mInitFromNodesAndTerminals = true;
 		/// Enable recomputation of system matrix during simulation
@@ -171,7 +173,9 @@ namespace DPsim {
 		/// set solver and component to initialization or simulation behaviour
 		void setSolverAndComponentBehaviour(Solver::Behaviour behaviour) { mSolverBehaviour = behaviour; }
 		///
-		void setMnaSolverImplementation(MnaSolverFactory::MnaSolverImpl mnaImpl) { mMnaImpl = mnaImpl; }
+		void setDirectLinearSolverImplementation(DirectLinearSolverImpl directImpl) { mDirectImpl = directImpl; }
+		///
+		void setDirectLinearSolverConfiguration(const DirectLinearSolverConfiguration& configuration) { mDirectLinearSolverConfiguration = configuration;	}
 		///
 		void doInitFromNodesAndTerminals(Bool f = true) { mInitFromNodesAndTerminals = f; }
 		///
@@ -225,6 +229,9 @@ namespace DPsim {
 		}
 		/// Write step time measurements to log file
 		void logStepTimes(String logName);
+
+		/// Write LU decomposition times measurements to log file
+		void logLUTimes();
 
 		///
 		void addInterface(Interface::Ptr eint) {

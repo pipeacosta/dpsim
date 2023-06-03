@@ -13,9 +13,9 @@ using namespace CPS;
 
 SP::Ph1::PVNode::PVNode(String uid, String name,
 	Logger::Level logLevel) : SimPowerComp<Complex>(uid, name, logLevel),
-	mPowerSetPoint(Attribute<Real>::create("P_set", mAttributes)),
-	mVoltageSetPoint(Attribute<Real>::create("V_set", mAttributes)),
-	mVoltagePerUnit(Attribute<Real>::create("V_set_pu", mAttributes)) { }
+	mPowerSetPoint(mAttributes->create<Real>("P_set")),
+	mVoltageSetPoint(mAttributes->create<Real>("V_set")),
+	mVoltagePerUnit(mAttributes->create<Real>("V_set_pu")) { }
 
 SP::Ph1::PVNode::PVNode(String uid, String name, Real power, Real vSetPoint, Real maxQ, Real ratedU, Real ratedS,
 	Logger::Level logLevel)
@@ -26,7 +26,7 @@ SP::Ph1::PVNode::PVNode(String uid, String name, Real power, Real vSetPoint, Rea
 
 	**mVoltagePerUnit = vSetPoint / ratedU;
 
-	mSLog->info("Create PV node for {} P={}, V={}", name, **mPowerSetPoint, **mVoltageSetPoint);
+	SPDLOG_LOGGER_INFO(mSLog, "Create PV node for {} P={}, V={}", name, **mPowerSetPoint, **mVoltageSetPoint);
 }
 
 

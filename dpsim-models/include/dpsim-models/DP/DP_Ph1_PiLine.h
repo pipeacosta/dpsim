@@ -57,9 +57,9 @@ namespace Ph1 {
 
 		// #### MNA section ####
 		/// Updates internal current variable of the component
-		void mnaUpdateCurrent(const Matrix& leftVector);
+		void mnaCompUpdateCurrent(const Matrix& leftVector);
 		/// Updates internal voltage variable of the component
-		void mnaUpdateVoltage(const Matrix& leftVector);
+		void mnaCompUpdateVoltage(const Matrix& leftVector);
 		/// MNA pre and post step operations
 		void mnaParentPreStep(Real time, Int timeStepCount) override;
 		void mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) override;
@@ -69,7 +69,7 @@ namespace Ph1 {
 
 		MNAInterface::List mnaTearGroundComponents();
 		void mnaTearInitialize(Real omega, Real timeStep);
-		void mnaTearApplyMatrixStamp(Matrix& tearMatrix);
+		void mnaTearApplyMatrixStamp(SparseMatrixRow& tearMatrix);
 		void mnaTearApplyVoltageStamp(Matrix& voltageVector);
 		void mnaTearPostStep(Complex voltage, Complex current);
 

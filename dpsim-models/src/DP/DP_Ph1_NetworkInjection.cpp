@@ -12,12 +12,12 @@ using namespace CPS;
 
 DP::Ph1::NetworkInjection::NetworkInjection(String uid, String name, Logger::Level logLevel)
 	: CompositePowerComp<Complex>(uid, name, true, true, logLevel),
-	mVoltageRef(Attribute<Complex>::createDynamic("V_ref", mAttributes)),
-	mSrcFreq(Attribute<Real>::createDynamic("f_src", mAttributes)) {
+	mVoltageRef(mAttributes->createDynamic<Complex>("V_ref")),
+	mSrcFreq(mAttributes->createDynamic<Real>("f_src")) {
 	setVirtualNodeNumber(0);
 	setTerminalNumber(1);
 
-	mSLog->info("Create {} {}", this->type(), name);
+	SPDLOG_LOGGER_INFO(mSLog, "Create {} {}", this->type(), name);
 	**mIntfVoltage = MatrixComp::Zero(1,1);
 	**mIntfCurrent = MatrixComp::Zero(1,1);
 
@@ -25,9 +25,9 @@ DP::Ph1::NetworkInjection::NetworkInjection(String uid, String name, Logger::Lev
 	mSubVoltageSource = std::make_shared<DP::Ph1::VoltageSource>(**mName + "_vs", mLogLevel);
 	addMNASubComponent(mSubVoltageSource, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, true);
 
-	mSLog->info("Electrical subcomponents: ");
+	SPDLOG_LOGGER_INFO(mSLog, "Electrical subcomponents: ");
 	for (auto subcomp: mSubComponents)
-		mSLog->info("- {}", subcomp->name());
+		SPDLOG_LOGGER_INFO(mSLog, "- {}", subcomp->name());
 
 	mSubVoltageSource->mVoltageRef->setReference(mVoltageRef);
 	mSubVoltageSource->mSrcFreq->setReference(mSrcFreq);
@@ -44,7 +44,7 @@ void DP::Ph1::NetworkInjection::setParameters(Complex voltageRef, Real srcFreq) 
 
 	mSubVoltageSource->setParameters(voltageRef, srcFreq);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(voltageRef),
 				Logger::realToString(srcFreq));
@@ -55,7 +55,7 @@ void DP::Ph1::NetworkInjection::setParameters(Complex initialPhasor, Real freqSt
 
 	mSubVoltageSource->setParameters(initialPhasor, freqStart, rocof, timeStart, duration, smoothRamp);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(initialPhasor),
 				Logger::realToString(freqStart));
@@ -66,7 +66,7 @@ void DP::Ph1::NetworkInjection::setParameters(Complex initialPhasor, Real modula
 
 	mSubVoltageSource->setParameters(initialPhasor, modulationFrequency, modulationAmplitude, baseFrequency, zigzag);
 
-	mSLog->info("\nVoltage Ref={:s} [V]"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage Ref={:s} [V]"
 				"\nFrequency={:s} [Hz]",
 				Logger::phasorToString(initialPhasor),
 				Logger::realToString(baseFrequency));
@@ -86,7 +86,7 @@ void DP::Ph1::NetworkInjection::initializeFromNodesAndTerminals(Real frequency) 
 // #### MNA functions ####
 
 void DP::Ph1::NetworkInjection::mnaParentApplyRightSideVectorStamp(Matrix& rightVector) {
-	mSLog->debug("Right Side Vector: {:s}",
+	SPDLOG_LOGGER_DEBUG(mSLog, "Right Side Vector: {:s}",
 				Logger::matrixToString(rightVector));
 }
 
@@ -99,7 +99,7 @@ void DP::Ph1::NetworkInjection::mnaParentAddPreStepDependencies(AttributeBase::L
 
 void DP::Ph1::NetworkInjection::mnaParentPreStep(Real time, Int timeStepCount) {
 	// pre-step of component itself
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
 void DP::Ph1::NetworkInjection::mnaParentAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
@@ -111,15 +111,15 @@ void DP::Ph1::NetworkInjection::mnaParentAddPostStepDependencies(AttributeBase::
 
 void DP::Ph1::NetworkInjection::mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
 	// post-step of component itself
-	mnaUpdateCurrent(**leftVector);
-	mnaUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+	mnaCompUpdateVoltage(**leftVector);
 }
 
-void DP::Ph1::NetworkInjection::mnaUpdateVoltage(const Matrix& leftVector) {
+void DP::Ph1::NetworkInjection::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	**mIntfVoltage = **mSubVoltageSource->mIntfVoltage;
 }
 
-void DP::Ph1::NetworkInjection::mnaUpdateCurrent(const Matrix& leftVector) {
+void DP::Ph1::NetworkInjection::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = **mSubVoltageSource->mIntfCurrent;
 }
 

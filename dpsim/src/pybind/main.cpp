@@ -65,6 +65,17 @@ PYBIND11_MODULE(dpsimpy, m) {
 
 	addAttributes(m);
 
+	py::class_<DPsim::DirectLinearSolverConfiguration>(m, "DirectLinearSolverConfiguration")
+		.def(py::init<>())
+		.def("set_fill_in_reduction_method", &DPsim::DirectLinearSolverConfiguration::setFillInReductionMethod)
+		.def("set_scaling_method", &DPsim::DirectLinearSolverConfiguration::setScalingMethod)
+		.def("set_partial_refactorization_method", &DPsim::DirectLinearSolverConfiguration::setPartialRefactorizationMethod)
+		.def("set_btf", &DPsim::DirectLinearSolverConfiguration::setBTF)
+		.def("get_scaling_method", &DPsim::DirectLinearSolverConfiguration::getScalingMethod)
+		.def("get_fill_in_reduction_method", &DPsim::DirectLinearSolverConfiguration::getFillInReductionMethod)
+		.def("get_partial_refactorization_method", &DPsim::DirectLinearSolverConfiguration::getPartialRefactorizationMethod)
+		.def("get_btf", &DPsim::DirectLinearSolverConfiguration::getBTF);
+
     py::class_<DPsim::Simulation>(m, "Simulation")
 	    .def(py::init<std::string, CPS::Logger::Level>(), "name"_a, "loglevel"_a = CPS::Logger::Level::off)
 		.def("name", &DPsim::Simulation::name)
@@ -88,7 +99,9 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.def("set_tearing_components", &DPsim::Simulation::setTearingComponents)
 		.def("add_event", &DPsim::Simulation::addEvent)
 		.def("set_solver_component_behaviour", &DPsim::Simulation::setSolverAndComponentBehaviour)
-		.def("set_mna_solver_implementation", &DPsim::Simulation::setMnaSolverImplementation);
+		.def("set_direct_solver_implementation", &DPsim::Simulation::setDirectLinearSolverImplementation)
+		.def("set_direct_linear_solver_configuration", &DPsim::Simulation::setDirectLinearSolverConfiguration)
+		.def("log_lu_times", &DPsim::Simulation::logLUTimes);
 
 	py::class_<DPsim::RealTimeSimulation, DPsim::Simulation>(m, "RealTimeSimulation")
 		.def(py::init<std::string, CPS::Logger::Level>(), "name"_a, "loglevel"_a = CPS::Logger::Level::info)
@@ -133,11 +146,11 @@ PYBIND11_MODULE(dpsimpy, m) {
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.
 		.def("log_attribute", py::overload_cast<const std::vector<CPS::String>&, CPS::AttributeBase::Ptr>(&DPsim::DataLogger::logAttribute), "names"_a, "attr"_a)
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.
-		.def("log_attribute", [](DPsim::DataLogger &logger, const CPS::String &name, const CPS::String &attr, CPS::IdentifiedObject &comp, CPS::UInt rowsMax, CPS::UInt colsMax) {
+		.def("log_attribute", [](DPsim::DataLogger &logger, const CPS::String &name, const CPS::String &attr, const CPS::IdentifiedObject &comp, CPS::UInt rowsMax, CPS::UInt colsMax) {
 			logger.logAttribute(name, comp.attribute(attr), rowsMax, colsMax);
 		}, "name"_a, "attr"_a, "comp"_a, "rows_max"_a = 0, "cols_max"_a = 0)
 		/// Compatibility method. Might be removed later when the python examples have been fully adapted.;
-		.def("log_attribute", [](DPsim::DataLogger &logger, const std::vector<CPS::String> &names, const CPS::String &attr, CPS::IdentifiedObject &comp) {
+		.def("log_attribute", [](DPsim::DataLogger &logger, const std::vector<CPS::String> &names, const CPS::String &attr, const CPS::IdentifiedObject &comp) {
 			logger.logAttribute(names, comp.attribute(attr));
 		});
 
@@ -179,6 +192,12 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.value("PVNode", CPS::GeneratorType::PVNode)
 		.value("TransientStability", CPS::GeneratorType::TransientStability)
 		.value("IdealVoltageSource", CPS::GeneratorType::IdealVoltageSource)
+		.value("SG3OrderVBR", CPS::GeneratorType::SG3OrderVBR)
+		.value("SG4OrderVBR", CPS::GeneratorType::SG4OrderVBR)
+		.value("SG6aOrderVBR", CPS::GeneratorType::SG6aOrderVBR)
+		.value("SG6bOrderVBR", CPS::GeneratorType::SG6bOrderVBR)
+		.value("FullOrderVBR", CPS::GeneratorType::FullOrderVBR)
+		.value("FullOrder", CPS::GeneratorType::FullOrder)
 		.value("NONE", CPS::GeneratorType::None);
 
 	py::enum_<DPsim::Solver::Type>(m, "Solver")
@@ -186,13 +205,34 @@ PYBIND11_MODULE(dpsimpy, m) {
 		.value("DAE", DPsim::Solver::Type::DAE)
 		.value("NRP", DPsim::Solver::Type::NRP);
 
-	py::enum_<DPsim::MnaSolverFactory::MnaSolverImpl>(m, "MnaSolverImpl")
-		.value("Undef", DPsim::MnaSolverFactory::MnaSolverImpl::Undef)
-		.value("EigenDense", DPsim::MnaSolverFactory::MnaSolverImpl::EigenDense)
-		.value("EigenSparse", DPsim::MnaSolverFactory::MnaSolverImpl::EigenSparse)
-		.value("CUDADense", DPsim::MnaSolverFactory::MnaSolverImpl::CUDADense)
-		.value("CUDASparse", DPsim::MnaSolverFactory::MnaSolverImpl::CUDASparse)
-		.value("CUDAMagma", DPsim::MnaSolverFactory::MnaSolverImpl::CUDAMagma);
+	py::enum_<DPsim::DirectLinearSolverImpl>(m, "DirectLinearSolverImpl")
+		.value("Undef", DPsim::DirectLinearSolverImpl::Undef)
+		.value("DenseLU", DPsim::DirectLinearSolverImpl::DenseLU)
+		.value("SparseLU", DPsim::DirectLinearSolverImpl::SparseLU)
+		.value("KLU", DPsim::DirectLinearSolverImpl::KLU)
+		.value("CUDADense", DPsim::DirectLinearSolverImpl::CUDADense)
+		.value("CUDASparse", DPsim::DirectLinearSolverImpl::CUDASparse)
+		.value("CUDAMagma", DPsim::DirectLinearSolverImpl::CUDAMagma);
+
+	py::enum_<DPsim::SCALING_METHOD>(m, "scaling_method")
+		.value("no_scaling", DPsim::SCALING_METHOD::NO_SCALING)
+		.value("sum_scaling", DPsim::SCALING_METHOD::SUM_SCALING)
+		.value("max_scaling", DPsim::SCALING_METHOD::MAX_SCALING);
+
+	py::enum_<DPsim::FILL_IN_REDUCTION_METHOD>(m, "fill_in_reduction_method")
+		.value("amd", DPsim::FILL_IN_REDUCTION_METHOD::AMD)
+		.value("amd_nv", DPsim::FILL_IN_REDUCTION_METHOD::AMD_NV)
+		.value("amd_ra", DPsim::FILL_IN_REDUCTION_METHOD::AMD_RA)
+		.value("colamd", DPsim::FILL_IN_REDUCTION_METHOD::COLAMD);
+
+	py::enum_<DPsim::PARTIAL_REFACTORIZATION_METHOD>(m, "partial_refactorization_method")
+		.value("no_partial_refactorization", DPsim::PARTIAL_REFACTORIZATION_METHOD::NO_PARTIAL_REFACTORIZATION)
+		.value("factorization_path", DPsim::PARTIAL_REFACTORIZATION_METHOD::FACTORIZATION_PATH)
+		.value("refactorization_restart", DPsim::PARTIAL_REFACTORIZATION_METHOD::REFACTORIZATION_RESTART);
+
+	py::enum_<DPsim::USE_BTF>(m, "use_btf")
+		.value("no_btf", DPsim::USE_BTF::NO_BTF)
+		.value("do_btf", DPsim::USE_BTF::DO_BTF);
 
 	py::enum_<CPS::CSVReader::Mode>(m, "CSVReaderMode")
 		.value("AUTO", CPS::CSVReader::Mode::AUTO)

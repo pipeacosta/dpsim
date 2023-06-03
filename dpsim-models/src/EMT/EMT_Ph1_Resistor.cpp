@@ -11,7 +11,7 @@
 using namespace CPS;
 
 EMT::Ph1::Resistor::Resistor(String uid, String name, Logger::Level logLevel)
-	: Base::Ph1::Resistor(mAttributes), SimPowerComp<Real>(uid, name, logLevel) {
+	: MNASimPowerComp<Real>(uid, name, false, true, logLevel), Base::Ph1::Resistor(mAttributes) {
 	setTerminalNumber(2);
 	**mIntfVoltage = Matrix::Zero(1,1);
 	**mIntfCurrent = Matrix::Zero(1,1);
@@ -28,7 +28,7 @@ void EMT::Ph1::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 	(**mIntfVoltage)(0,0) = (initialSingleVoltage(1) - initialSingleVoltage(0)).real();
 	(**mIntfCurrent)(0,0) = (**mIntfVoltage)(0,0) / **mResistance;
 
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:f}"
 		"\nCurrent: {:f}"
@@ -42,23 +42,12 @@ void EMT::Ph1::Resistor::initializeFromNodesAndTerminals(Real frequency) {
 	mSLog->flush();
 }
 
-void EMT::Ph1::Resistor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
-	MNAInterface::mnaInitialize(omega, timeStep);
+void EMT::Ph1::Resistor::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
-
-	mSLog->info(
-		"\n--- Initialization from powerflow ---"
-		"\nVoltage across: {:f}"
-		"\nCurrent: {:f}"
-		"\n--- Initialization from powerflow finished ---",
-		(**mIntfVoltage)(0,0),
-		(**mIntfCurrent)(0,0));
-	mSLog->flush();
+	**mRightVector = Matrix::Zero(0, 0);
 }
 
-void EMT::Ph1::Resistor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void EMT::Ph1::Resistor::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	Real conductance = 1. / **mResistance;
 	// Set diagonal entries
 	if (terminalNotGrounded(0))
@@ -72,21 +61,27 @@ void EMT::Ph1::Resistor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 	}
 
 	if (terminalNotGrounded(0))
-		mSLog->info("Add {:f} to system at ({:d},{:d})", conductance, matrixNodeIndex(0), matrixNodeIndex(0));
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:f} to system at ({:d},{:d})", conductance, matrixNodeIndex(0), matrixNodeIndex(0));
 	if (terminalNotGrounded(1))
-		mSLog->info("Add {:f} to system at ({:d},{:d})", conductance, matrixNodeIndex(1), matrixNodeIndex(1));
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:f} to system at ({:d},{:d})", conductance, matrixNodeIndex(1), matrixNodeIndex(1));
 	if ( terminalNotGrounded(0)  &&  terminalNotGrounded(1) ) {
-		mSLog->info("Add {:f} to system at ({:d},{:d})", -conductance, matrixNodeIndex(0), matrixNodeIndex(1));
-		mSLog->info("Add {:f} to system at ({:d},{:d})", -conductance, matrixNodeIndex(1), matrixNodeIndex(0));
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:f} to system at ({:d},{:d})", -conductance, matrixNodeIndex(0), matrixNodeIndex(1));
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:f} to system at ({:d},{:d})", -conductance, matrixNodeIndex(1), matrixNodeIndex(0));
 	}
 }
 
-void EMT::Ph1::Resistor::MnaPostStep::execute(Real time, Int timeStepCount) {
-	mResistor.mnaUpdateVoltage(**mLeftVector);
-	mResistor.mnaUpdateCurrent(**mLeftVector);
+void EMT::Ph1::Resistor::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+	attributeDependencies.push_back(leftVector);
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void EMT::Ph1::Resistor::mnaUpdateVoltage(const Matrix& leftVector) {
+void EMT::Ph1::Resistor::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
+}
+
+void EMT::Ph1::Resistor::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// v1 - v0
 	(**mIntfVoltage)(0,0) = 0;
 	if (terminalNotGrounded(1))
@@ -95,6 +90,6 @@ void EMT::Ph1::Resistor::mnaUpdateVoltage(const Matrix& leftVector) {
 		(**mIntfVoltage)(0,0) = (**mIntfVoltage)(0,0) - Math::realFromVectorElement(leftVector, matrixNodeIndex(0));
 }
 
-void EMT::Ph1::Resistor::mnaUpdateCurrent(const Matrix& leftVector) {
+void EMT::Ph1::Resistor::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	(**mIntfCurrent)(0,0) = (**mIntfVoltage)(0,0) / **mResistance;
 }

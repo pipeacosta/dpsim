@@ -12,9 +12,9 @@
 using namespace CPS;
 
 EMT::Ph3::VoltageSource::VoltageSource(String uid, String name, Logger::Level logLevel)
-	: SimPowerComp<Real>(uid, name, logLevel),
-	mVoltageRef(Attribute<MatrixComp>::createDynamic("V_ref", mAttributes)), // rms-value, phase-to-phase
-	mSrcFreq(Attribute<Real>::createDynamic("f_src", mAttributes)) {
+	: MNASimPowerComp<Real>(uid, name, true, true, logLevel),
+	mVoltageRef(mAttributes->createDynamic<MatrixComp>("V_ref")), // rms-value, phase-to-phase
+	mSrcFreq(mAttributes->createDynamic<Real>("f_src")) {
 	mPhaseType = PhaseType::ABC;
 	setVirtualNodeNumber(1);
 	setTerminalNumber(2);
@@ -31,7 +31,7 @@ void EMT::Ph3::VoltageSource::setParameters(MatrixComp voltageRef, Real srcFreq)
 
 	**mVoltageRef = voltageRef;
 
-	mSLog->info("\nVoltage reference phasor [V]: {:s}"
+	SPDLOG_LOGGER_INFO(mSLog, "\nVoltage reference phasor [V]: {:s}"
 				"\nFrequency [Hz]: {:s}",
 				Logger::matrixCompToString(voltageRef),
 				Logger::realToString(srcFreq));
@@ -62,7 +62,7 @@ void EMT::Ph3::VoltageSource::setParameters(MatrixComp voltageRef, Real modulati
 }
 
 void EMT::Ph3::VoltageSource::initializeFromNodesAndTerminals(Real frequency) {
-	mSLog->info("\n--- Initialization from node voltages ---");
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Initialization from node voltages ---");
 	// TODO: this approach currently overwrites voltage reference set from outside, when not using setParameters
 	if (!mParametersSet) {
 		auto srcSigSine = Signal::SineWaveGenerator::make(**mName + "_sw");
@@ -73,18 +73,18 @@ void EMT::Ph3::VoltageSource::initializeFromNodesAndTerminals(Real frequency) {
 
 		**mVoltageRef = CPS::Math::singlePhaseVariableToThreePhase(initialSingleVoltage(1) - initialSingleVoltage(0));
 
-		mSLog->info("\nReference voltage: {:s}"
+		SPDLOG_LOGGER_INFO(mSLog, "\nReference voltage: {:s}"
 					"\nTerminal 0 voltage: {:s}"
 					"\nTerminal 1 voltage: {:s}",
 					Logger::matrixCompToString(**mVoltageRef),
 					Logger::phasorToString(initialSingleVoltage(0)),
 					Logger::phasorToString(initialSingleVoltage(1)));
 	} else {
-		mSLog->info("\nInitialization from node voltages omitted (parameter already set)."
+		SPDLOG_LOGGER_INFO(mSLog, "\nInitialization from node voltages omitted (parameter already set)."
 					"\nReference voltage: {:s}",
 					Logger::matrixCompToString(**mVoltageRef));
 	}
-	mSLog->info("\n--- Initialization from node voltages ---");
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Initialization from node voltages ---");
 	mSLog->flush();
 }
 
@@ -95,19 +95,11 @@ SimPowerComp<Real>::Ptr EMT::Ph3::VoltageSource::clone(String name) {
 }
 
 
-void EMT::Ph3::VoltageSource::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
-	MNAInterface::mnaInitialize(omega, timeStep);
-
+void EMT::Ph3::VoltageSource::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-
-	mMnaTasks.push_back(std::make_shared<MnaPreStep>(*this));
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
-
-	**mRightVector = Matrix::Zero(leftVector->get().rows(), 1);
-
 }
 
-void EMT::Ph3::VoltageSource::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void EMT::Ph3::VoltageSource::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 	if (terminalNotGrounded(0)) {
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0, 0), mVirtualNodes[0]->matrixNodeIndex(PhaseType::A), -1);
 		Math::addToMatrixElement(systemMatrix, mVirtualNodes[0]->matrixNodeIndex(PhaseType::A), matrixNodeIndex(0, 0), -1);
@@ -140,7 +132,7 @@ void EMT::Ph3::VoltageSource::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 	// }
 }
 
-void EMT::Ph3::VoltageSource::mnaApplyRightSideVectorStamp(Matrix& rightVector) {
+void EMT::Ph3::VoltageSource::mnaCompApplyRightSideVectorStamp(Matrix& rightVector) {
 	Math::setVectorElement(rightVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::A), (**mIntfVoltage)(0, 0));
 	Math::setVectorElement(rightVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::B), (**mIntfVoltage)(1, 0));
 	Math::setVectorElement(rightVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::C), (**mIntfVoltage)(2, 0));
@@ -156,33 +148,33 @@ void EMT::Ph3::VoltageSource::updateVoltage(Real time) {
 	} else {
 		**mIntfVoltage = RMS3PH_TO_PEAK1PH * (**mVoltageRef).real();
 	}
-	mSLog->debug(
+	SPDLOG_LOGGER_DEBUG(mSLog,
 		"\nUpdate Voltage: {:s}",
 		Logger::matrixToString(**mIntfVoltage)
 	);
 }
 
-void EMT::Ph3::VoltageSource::mnaAddPreStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes) {
+void EMT::Ph3::VoltageSource::mnaCompAddPreStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes) {
 	attributeDependencies.push_back(mVoltageRef);
 	modifiedAttributes.push_back(mRightVector);
 	modifiedAttributes.push_back(mIntfVoltage);
 }
 
-void EMT::Ph3::VoltageSource::mnaPreStep(Real time, Int timeStepCount) {
+void EMT::Ph3::VoltageSource::mnaCompPreStep(Real time, Int timeStepCount) {
 	updateVoltage(time);
-	mnaApplyRightSideVectorStamp(**mRightVector);
+	mnaCompApplyRightSideVectorStamp(**mRightVector);
 }
 
-void EMT::Ph3::VoltageSource::mnaAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+void EMT::Ph3::VoltageSource::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
 	attributeDependencies.push_back(leftVector);
 	modifiedAttributes.push_back(mIntfCurrent);
 };
 
-void EMT::Ph3::VoltageSource::mnaPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateCurrent(**leftVector);
+void EMT::Ph3::VoltageSource::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+	mnaCompUpdateCurrent(**leftVector);
 }
 
-void EMT::Ph3::VoltageSource::mnaUpdateCurrent(const Matrix& leftVector) {
+void EMT::Ph3::VoltageSource::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	(**mIntfCurrent)(0, 0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::A));
 	(**mIntfCurrent)(1, 0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::B));
 	(**mIntfCurrent)(2, 0) = Math::realFromVectorElement(leftVector, mVirtualNodes[0]->matrixNodeIndex(PhaseType::C));

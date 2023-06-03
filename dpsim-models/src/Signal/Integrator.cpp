@@ -13,19 +13,19 @@ using namespace CPS::Signal;
 
 Integrator::Integrator(String name, Logger::Level logLevel) :
 	SimSignalComp(name, name, logLevel),
-    mInputRef(Attribute<Real>::createDynamic("input_ref", mAttributes)),
+    mInputRef(mAttributes->createDynamic<Real>("input_ref")),
     /// CHECK: Which of these really need to be attributes?
-    mInputPrev(Attribute<Real>::create("input_prev", mAttributes)),
-    mStatePrev(Attribute<Real>::create("state_prev", mAttributes)),
-    mOutputPrev(Attribute<Real>::create("output_prev", mAttributes)),
-    mInputCurr(Attribute<Real>::create("input_curr", mAttributes)),
-    mStateCurr(Attribute<Real>::create("state_curr", mAttributes)),
-    mOutputCurr(Attribute<Real>::create("output_curr", mAttributes)) { }
+    mInputPrev(mAttributes->create<Real>("input_prev")),
+    mStatePrev(mAttributes->create<Real>("state_prev")),
+    mOutputPrev(mAttributes->create<Real>("output_prev")),
+    mInputCurr(mAttributes->create<Real>("input_curr")),
+    mStateCurr(mAttributes->create<Real>("state_curr")),
+    mOutputCurr(mAttributes->create<Real>("output_curr")) { }
 
 void Integrator::setParameters(Real timestep) {
     mTimeStep = timestep;
 
-    mSLog->info("Integration step = {}", mTimeStep);
+    SPDLOG_LOGGER_INFO(mSLog, "Integration step = {}", mTimeStep);
 }
 
 void Integrator::setInitialValues(Real input_init, Real state_init, Real output_init) {
@@ -33,8 +33,8 @@ void Integrator::setInitialValues(Real input_init, Real state_init, Real output_
     **mStateCurr = state_init;
     **mOutputCurr = output_init;
 
-    mSLog->info("Initial values:");
-    mSLog->info("inputCurrInit = {}, stateCurrInit = {}, outputCurrInit = {}", **mInputCurr, **mStateCurr, **mOutputCurr);
+    SPDLOG_LOGGER_INFO(mSLog, "Initial values:");
+    SPDLOG_LOGGER_INFO(mSLog, "inputCurrInit = {}, stateCurrInit = {}, outputCurrInit = {}", **mInputCurr, **mStateCurr, **mOutputCurr);
 }
 
 void Integrator::signalAddPreStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes) {
@@ -59,14 +59,14 @@ void Integrator::signalAddStepDependencies(AttributeBase::List &prevStepDependen
 void Integrator::signalStep(Real time, Int timeStepCount) {
     **mInputCurr = **mInputRef;
 
-    mSLog->info("Time {}:", time);
-    mSLog->info("Input values: inputCurr = {}, inputPrev = {}, statePrev = {}", **mInputCurr, **mInputPrev, **mStatePrev);
+    SPDLOG_LOGGER_INFO(mSLog, "Time {}:", time);
+    SPDLOG_LOGGER_INFO(mSLog, "Input values: inputCurr = {}, inputPrev = {}, statePrev = {}", **mInputCurr, **mInputPrev, **mStatePrev);
 
     **mStateCurr =**mStatePrev + mTimeStep/2.0* **mInputCurr + mTimeStep/2.0* **mInputPrev;
     **mOutputCurr = **mStateCurr;
 
-    mSLog->info("State values: stateCurr = {}", **mStateCurr);
-    mSLog->info("Output values: outputCurr = {}:", **mOutputCurr);
+    SPDLOG_LOGGER_INFO(mSLog, "State values: stateCurr = {}", **mStateCurr);
+    SPDLOG_LOGGER_INFO(mSLog, "Output values: outputCurr = {}:", **mOutputCurr);
 }
 
 Task::List Integrator::getTasks() {

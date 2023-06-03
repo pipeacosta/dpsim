@@ -11,12 +11,12 @@ using namespace CPS;
 
 SP::Ph1::SynchronGeneratorTrStab::SynchronGeneratorTrStab(String uid, String name, Logger::Level logLevel)
 	: Base::SynchronGenerator(mAttributes), CompositePowerComp<Complex>(uid, name, true, true, logLevel),
-	mEp(Attribute<Complex>::create("Ep", mAttributes)),
-	mEp_abs(Attribute<Real>::create("Ep_mag", mAttributes)),
-	mEp_phase(Attribute<Real>::create("Ep_phase", mAttributes)),
-	mDelta_p(Attribute<Real>::create("delta_r", mAttributes)),
-	mRefOmega(Attribute<Real>::createDynamic("w_ref", mAttributes)),
-	mRefDelta(Attribute<Real>::createDynamic("delta_ref", mAttributes)) {
+	mEp(mAttributes->create<Complex>("Ep")),
+	mEp_abs(mAttributes->create<Real>("Ep_mag")),
+	mEp_phase(mAttributes->create<Real>("Ep_phase")),
+	mDelta_p(mAttributes->create<Real>("delta_r")),
+	mRefOmega(mAttributes->createDynamic<Real>("w_ref")),
+	mRefDelta(mAttributes->createDynamic<Real>("delta_ref")) {
 	setVirtualNodeNumber(2);
 	setTerminalNumber(1);
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
@@ -35,7 +35,7 @@ SimPowerComp<Complex>::Ptr SP::Ph1::SynchronGeneratorTrStab::clone(String name) 
 void SP::Ph1::SynchronGeneratorTrStab::setFundamentalParametersPU(Real nomPower, Real nomVolt, Real nomFreq,
 	Real Ll, Real Lmd, Real Llfd, Real inertia, Real D) {
 	setBaseParameters(nomPower, nomVolt, nomFreq);
-	mSLog->info("\n--- Base Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Base Parameters ---"
 	"\nnomPower: {:f}"
 	"\nnomVolt: {:f}"
 	"\nnomFreq: {:f}", mNomPower, mNomVolt, mNomFreq);
@@ -59,7 +59,7 @@ void SP::Ph1::SynchronGeneratorTrStab::setFundamentalParametersPU(Real nomPower,
 	// D is transformed to an absolute value to obtain Kd, which will be used in the swing equation
 	mKd= D*mNomPower/mNomOmega;
 
-	mSLog->info("\n--- Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Parameters ---"
 				"\nimpedance: {:f}"
 				"\ninductance: {:f}"
 				"\ninertia: {:f}"
@@ -69,7 +69,7 @@ void SP::Ph1::SynchronGeneratorTrStab::setFundamentalParametersPU(Real nomPower,
 void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersSI(Real nomPower, Real nomVolt, Real nomFreq, Int polePairNumber,
 	Real Rs, Real Lpd, Real inertiaJ, Real Kd) {
 	setBaseParameters(nomPower, nomVolt, nomFreq);
-	mSLog->info("\n--- Base Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Base Parameters ---"
 		"\nnomPower: {:f}"
 		"\nnomVolt: {:f}"
 		"\nnomFreq: {:f}", mNomPower, mNomVolt, mNomFreq);
@@ -84,7 +84,7 @@ void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersSI(Real nomPower, Re
 	mXpd = mNomOmega * Lpd;
 	mLpd = Lpd;
 
-	mSLog->info("\n--- Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Parameters ---"
 				"\nimpedance: {:f}"
 			"\ninductance: {:f}"
 			"\ninertia: {:f}"
@@ -94,12 +94,12 @@ void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersSI(Real nomPower, Re
 void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersPU(Real nomPower, Real nomVolt, Real nomFreq,
 	Real Xpd, Real inertia, Real Rs, Real D) {
 	setBaseParameters(nomPower, nomVolt, nomFreq);
-	mSLog->info("\n--- Base Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Base Parameters ---"
 	"\nnomPower: {:f}"
 	"\nnomVolt: {:f}"
 	"\nnomFreq: {:f}", mNomPower, mNomVolt, mNomFreq);
 
-	mSLog->info("\n--- Parameters Per-Unit ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Parameters Per-Unit ---"
 				"\n Xpd: {:f} [p.u.]", Xpd);
 
 	// Input is in per unit but all values are converted to absolute values.
@@ -117,7 +117,7 @@ void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersPU(Real nomPower, Re
 	// D is transformed to an absolute value to obtain Kd, which will be used in the swing equation
 	mKd= D*mNomPower/mNomOmega;
 
-	mSLog->info("\n--- Parameters ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Parameters ---"
 				"\nXpd: {:f} [Ohm]"
 				"\nLpd: {:f} [H]"
 				"\nInertia: {:f} [s]"
@@ -127,7 +127,7 @@ void SP::Ph1::SynchronGeneratorTrStab::setStandardParametersPU(Real nomPower, Re
 void SP::Ph1::SynchronGeneratorTrStab::setModelFlags(Bool convertWithOmegaMech) {
 	mConvertWithOmegaMech = convertWithOmegaMech;
 
-	mSLog->info("\n--- Model flags ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Model flags ---"
 			"\nconvertWithOmegaMech: {:s}", std::to_string(mConvertWithOmegaMech));
 }
 
@@ -193,7 +193,7 @@ void SP::Ph1::SynchronGeneratorTrStab::initializeFromNodesAndTerminals(Real freq
 	mSubInductor->initializeFromNodesAndTerminals(frequency);
 	addMNASubComponent(mSubInductor, MNA_SUBCOMP_TASK_ORDER::TASK_AFTER_PARENT, MNA_SUBCOMP_TASK_ORDER::TASK_BEFORE_PARENT, false);
 
-	mSLog->info("\n--- Initialize according to powerflow ---"
+	SPDLOG_LOGGER_INFO(mSLog, "\n--- Initialize according to powerflow ---"
 				"\nTerminal 0 voltage: {:e}<{:e}"
 				"\nVoltage behind reactance: {:e}<{:e}"
 				"\ninitial electrical power: {:e}+j{:e}"
@@ -275,16 +275,16 @@ void SP::Ph1::SynchronGeneratorTrStab::AddBStep::execute(Real time, Int timeStep
 }
 
 void SP::Ph1::SynchronGeneratorTrStab::mnaParentPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
-	mnaUpdateVoltage(**leftVector);
-	mnaUpdateCurrent(**leftVector);
+	mnaCompUpdateVoltage(**leftVector);
+	mnaCompUpdateCurrent(**leftVector);
 }
 
-void SP::Ph1::SynchronGeneratorTrStab::mnaUpdateVoltage(const Matrix& leftVector) {
+void SP::Ph1::SynchronGeneratorTrStab::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	SPDLOG_LOGGER_DEBUG(mSLog, "Read voltage from {:d}", matrixNodeIndex(0));
 	(**mIntfVoltage)(0,0) = Math::complexFromVectorElement(leftVector, matrixNodeIndex(0));
 }
 
-void SP::Ph1::SynchronGeneratorTrStab::mnaUpdateCurrent(const Matrix& leftVector) {
+void SP::Ph1::SynchronGeneratorTrStab::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	SPDLOG_LOGGER_DEBUG(mSLog, "Read current from {:d}", matrixNodeIndex(0));
 	//Current flowing out of component
 	**mIntfCurrent = mSubInductor->mIntfCurrent->get();
@@ -295,5 +295,5 @@ void SP::Ph1::SynchronGeneratorTrStab::setReferenceOmega(Attribute<Real>::Ptr re
 	mRefDelta->setReference(refDeltaPtr);
 	mUseOmegaRef=true;
 
-	mSLog->info("Use of reference omega.");
+	SPDLOG_LOGGER_INFO(mSLog, "Use of reference omega.");
 }

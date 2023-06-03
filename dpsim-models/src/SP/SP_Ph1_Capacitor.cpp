@@ -11,7 +11,7 @@
 using namespace CPS;
 
 SP::Ph1::Capacitor::Capacitor(String uid, String name, Logger::Level logLevel)
-	: Base::Ph1::Capacitor(mAttributes), SimPowerComp<Complex>(uid, name, logLevel) {
+	: MNASimPowerComp<Complex>(uid, name, false, true, logLevel), Base::Ph1::Capacitor(mAttributes) {
 	**mIntfVoltage = MatrixComp::Zero(1, 1);
 	**mIntfCurrent = MatrixComp::Zero(1, 1);
 	setTerminalNumber(2);
@@ -32,13 +32,13 @@ void SP::Ph1::Capacitor::initializeFromNodesAndTerminals(Real frequency) {
 	(**mIntfVoltage)(0, 0) = initialSingleVoltage(1) - initialSingleVoltage(0);
 	**mIntfCurrent = mSusceptance * **mIntfVoltage;
 
-	mSLog->info("\nCapacitance [F]: {:s}"
+	SPDLOG_LOGGER_INFO(mSLog, "\nCapacitance [F]: {:s}"
 				"\nImpedance [Ohm]: {:s}"
 				"\nAdmittance [S]: {:s}",
 				Logger::realToString(**mCapacitance),
 				Logger::complexToString(mImpedance),
 				Logger::complexToString(mAdmittance));
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- Initialization from powerflow ---"
 		"\nVoltage across: {:s}"
 		"\nCurrent: {:s}"
@@ -53,13 +53,9 @@ void SP::Ph1::Capacitor::initializeFromNodesAndTerminals(Real frequency) {
 
 // #### MNA section ####
 
-void SP::Ph1::Capacitor::mnaInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
+void SP::Ph1::Capacitor::mnaCompInitialize(Real omega, Real timeStep, Attribute<Matrix>::Ptr leftVector) {
 	updateMatrixNodeIndices();
-
-	**mRightVector = Matrix::Zero(leftVector->get().rows(), 1);
-	mMnaTasks.push_back(std::make_shared<MnaPostStep>(*this, leftVector));
-
-	mSLog->info(
+	SPDLOG_LOGGER_INFO(mSLog,
 		"\n--- MNA initialization ---"
 		"\nInitial voltage {:s}"
 		"\nInitial current {:s}"
@@ -68,7 +64,7 @@ void SP::Ph1::Capacitor::mnaInitialize(Real omega, Real timeStep, Attribute<Matr
 		Logger::phasorToString((**mIntfCurrent)(0, 0)));
 }
 
-void SP::Ph1::Capacitor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
+void SP::Ph1::Capacitor::mnaCompApplySystemMatrixStamp(SparseMatrixRow& systemMatrix) {
 
 	if (terminalNotGrounded(0)) {
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(0), matrixNodeIndex(0), mSusceptance);
@@ -81,33 +77,33 @@ void SP::Ph1::Capacitor::mnaApplySystemMatrixStamp(Matrix& systemMatrix) {
 		Math::addToMatrixElement(systemMatrix, matrixNodeIndex(1), matrixNodeIndex(0), -mSusceptance);
 	}
 
-	mSLog->info("-- Matrix Stamp ---");
+	SPDLOG_LOGGER_INFO(mSLog, "-- Matrix Stamp ---");
 	if (terminalNotGrounded(0))
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			mSusceptance.real(), mSusceptance.imag(), matrixNodeIndex(0), matrixNodeIndex(0));
 	if (terminalNotGrounded(1))
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			mSusceptance.real(), mSusceptance.imag(), matrixNodeIndex(1), matrixNodeIndex(1));
 	if (terminalNotGrounded(0) && terminalNotGrounded(1)) {
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			-mSusceptance.real(), -mSusceptance.imag(), matrixNodeIndex(0), matrixNodeIndex(1));
-		mSLog->info("Add {:e}+j{:e} to system at ({:d},{:d})",
+		SPDLOG_LOGGER_INFO(mSLog, "Add {:e}+j{:e} to system at ({:d},{:d})",
 			-mSusceptance.real(), -mSusceptance.imag(), matrixNodeIndex(1), matrixNodeIndex(0));
 	}
 }
 
-void SP::Ph1::Capacitor::mnaAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
+void SP::Ph1::Capacitor::mnaCompAddPostStepDependencies(AttributeBase::List &prevStepDependencies, AttributeBase::List &attributeDependencies, AttributeBase::List &modifiedAttributes, Attribute<Matrix>::Ptr &leftVector) {
 	attributeDependencies.push_back(leftVector);
-	modifiedAttributes.push_back(this->attribute("v_intf"));
-	modifiedAttributes.push_back(this->attribute("i_intf"));
+	modifiedAttributes.push_back(mIntfVoltage);
+	modifiedAttributes.push_back(mIntfCurrent);
 }
 
-void SP::Ph1::Capacitor::mnaPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
+void SP::Ph1::Capacitor::mnaCompPostStep(Real time, Int timeStepCount, Attribute<Matrix>::Ptr &leftVector) {
 	this->mnaUpdateVoltage(**leftVector);
 	this->mnaUpdateCurrent(**leftVector);
 }
 
-void SP::Ph1::Capacitor::mnaUpdateVoltage(const Matrix& leftVector) {
+void SP::Ph1::Capacitor::mnaCompUpdateVoltage(const Matrix& leftVector) {
 	// v1 - v0
 	**mIntfVoltage = Matrix::Zero(3, 1);
 	if (terminalNotGrounded(1)) {
@@ -118,7 +114,7 @@ void SP::Ph1::Capacitor::mnaUpdateVoltage(const Matrix& leftVector) {
 	}
 }
 
-void SP::Ph1::Capacitor::mnaUpdateCurrent(const Matrix& leftVector) {
+void SP::Ph1::Capacitor::mnaCompUpdateCurrent(const Matrix& leftVector) {
 	**mIntfCurrent = mSusceptance * **mIntfVoltage;
 }
 
@@ -129,18 +125,18 @@ void SP::Ph1::Capacitor::setBaseVoltage(Real baseVoltage){
 }
 
 void SP::Ph1::Capacitor::calculatePerUnitParameters(Real baseApparentPower){
-	mSLog->info("#### Calculate Per Unit Parameters for {}", **mName);
+	SPDLOG_LOGGER_INFO(mSLog, "#### Calculate Per Unit Parameters for {}", **mName);
     mBaseApparentPower = baseApparentPower;
-	mSLog->info("Base Power={} [VA]", baseApparentPower);
+	SPDLOG_LOGGER_INFO(mSLog, "Base Power={} [VA]", baseApparentPower);
 
 	mBaseImpedance = mBaseVoltage * mBaseVoltage / mBaseApparentPower;
 	mBaseAdmittance = 1.0 / mBaseImpedance;
 	mBaseCurrent = baseApparentPower / (mBaseVoltage*sqrt(3)); // I_base=(S_threephase/3)/(V_line_to_line/sqrt(3))
-	mSLog->info("Base Voltage={} [V]  Base Impedance={} [Ohm]", mBaseVoltage, mBaseImpedance);
+	SPDLOG_LOGGER_INFO(mSLog, "Base Voltage={} [V]  Base Impedance={} [Ohm]", mBaseVoltage, mBaseImpedance);
 
 	mImpedancePerUnit = mImpedance / mBaseImpedance;
 	mAdmittancePerUnit = 1. / mImpedancePerUnit;
-    mSLog->info("Impedance={} [pu]  Admittance={} [pu]", Logger::complexToString(mImpedancePerUnit), Logger::complexToString(mAdmittancePerUnit));
+    SPDLOG_LOGGER_INFO(mSLog, "Impedance={} [pu]  Admittance={} [pu]", Logger::complexToString(mImpedancePerUnit), Logger::complexToString(mAdmittancePerUnit));
 }
 
 void SP::Ph1::Capacitor::pfApplyAdmittanceMatrixStamp(SparseMatrixCompRow & Y) {
@@ -155,5 +151,5 @@ void SP::Ph1::Capacitor::pfApplyAdmittanceMatrixStamp(SparseMatrixCompRow & Y) {
 
 	//set the circuit matrix values
 	Y.coeffRef(bus1, bus1) += mAdmittancePerUnit;
-	mSLog->info("#### Y matrix stamping: {}", mAdmittancePerUnit);
+	SPDLOG_LOGGER_INFO(mSLog, "#### Y matrix stamping: {}", mAdmittancePerUnit);
 }
