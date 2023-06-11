@@ -20,6 +20,7 @@ set(SHMEM_SOURCES
 	SocketCosimExample.cpp
 	CosimExample_ext_control.cpp
 	CosimExample_ext_control_base.cpp
+	attributes_test.cpp
 	#ShmemExample.cpp
 	#ShmemDistributedReference.cpp
 	#ShmemDistributedDirect.cpp
