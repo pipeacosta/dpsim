@@ -7,8 +7,8 @@ Jupyter notebooks can either use the DPsim Python interface to run simulations o
 The data analysis and plotting is always done in Python using common libraries like Matplotlib.
 To collect the simulation results from within Python, one can use the villas-dataprocessing Python package.&lt;/p>
 &lt;p>&lt;img src="dpsim_modules.svg" alt="image">&lt;/p>
-&lt;p>Another approach to get data in or out of DPsim is the VILLAS interface, which does not depend on Python at all.
-The main purpose of the VILLAS interface is to exchange data during the simulation runtime, for example, in real-time simulation experiments.
+&lt;p>Another approach to get data in or out of DPsim is the VILLASnode interface, which does not depend on Python at all.
+The main purpose of the VILLASnode interface is to exchange data during the simulation runtime, for example, in real-time simulation experiments.
 The data could be send to other simulators, hardware or other software components like databases.
 Storing the data in databases can be another way of managing (also offline) simulation results if the Python CSV method is not desireable.&lt;/p>
 &lt;p>The CIM reader is based on the CIM++ library and provides a comfortable alternative to defining the grid manually in C++ or Python.
@@ -40,52 +40,143 @@ The connection of electrical components, &lt;code>TopologicalPowerComp&lt;/code>
 These three types describe the &lt;em>electrical&lt;/em> connections of the network, which are bidirectional and include voltages and currents.
 The signal type elements, &lt;code>TopologicalSignalComp&lt;/code>, can only have unidirectional components, which are not expressed using node and terminals.
 Instead, the attribute system is used to define signal type connections.&lt;/p></description></item><item><title>Docs: Attributes</title><link>https://sogno-platform.github.io/dpsim/docs/overview/attributes/</link><pubDate>Fri, 01 May 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/overview/attributes/</guid><description>
-&lt;p>Attributes, instances of the &lt;code>Attribute&lt;/code> class, serve multiple purposes in DPsim:&lt;/p>
-&lt;ul>
-&lt;li>add meta information about variables, like read and write access&lt;/li>
-&lt;li>in combination with tasks, they are the input required by the scheduler&lt;/li>
-&lt;li>connect components by pointing an attribute of one component to another component&amp;rsquo;s member variable&lt;/li>
-&lt;li>add additional getter / setter lambda functions to variables&lt;/li>
-&lt;li>add reflexion, which is not supported by C++ directly&lt;/li>
-&lt;/ul>
-&lt;p>Let&amp;rsquo;s have a look at some code snippets that use attributes.&lt;/p>
-&lt;p>Classes support attributes by inheriting from &lt;code>AttributeList&lt;/code>:&lt;/p>
-&lt;pre>&lt;code>class IdentifiedObject: virtual public AttributeList {
-...
-}
-&lt;/code>&lt;/pre>
-&lt;p>New attributes are usually registered in the constructor of a class:&lt;/p>
-&lt;pre>&lt;code>DP::Ph1::Inductor::Inductor(String uid, String name, Logger::Level logLevel)
-...
-addAttribute&amp;lt;Real&amp;gt;(&amp;quot;L&amp;quot;, &amp;amp;mInductance, Flags::read | Flags::write);
-}
-&lt;/code>&lt;/pre>
-&lt;p>Here, the attribute has the name &lt;code>L&lt;/code> and points to the member variable &lt;code>mInductance&lt;/code>.
-Besides, the attribute enables reading and writing this variable.&lt;/p>
-&lt;p>To access an attribute, you need to know its name and the component it belongs to.
-For example, adding the voltage at node &lt;code>n1&lt;/code> to the logger for a simulation can be done as follows:&lt;/p>
-&lt;pre>&lt;code>logger-&amp;gt;addAttribute(&amp;quot;v1&amp;quot;, n1-&amp;gt;attributeMatrixComp(&amp;quot;v&amp;quot;));
-&lt;/code>&lt;/pre>
-&lt;p>Note that the voltage is a complex matrix in this case.
-Since we would like to use Eigen matrix specific methods in the logger, the &lt;code>attributeMatrixComp&lt;/code> function is used to return the attribute already casted to a complex matrix type.&lt;/p>
+&lt;p>In DPsim, an attribute is a special kind of variable which usually stores a scalar or matrix value used in the simulation.
+Examples for attributes are the voltage of a node, the reference current of a current source, or the left and right vectors of the MNA matrix system.
+In general, attributes are instances of the &lt;code>Attribute&amp;lt;T&amp;gt;&lt;/code> class, but they are usually stored and accessed through a custom smart pointer of type
+&lt;code>const AttributeBase::Ptr&lt;/code> (which expands to &lt;code>const AttributePointer&amp;lt;AttributeBase&amp;gt;&lt;/code>).&lt;/p>
+&lt;p>Through the template parameter &lt;code>T&lt;/code> of the &lt;code>Attribute&amp;lt;T&amp;gt;&lt;/code> class, attributes can have different value types, most commonly &lt;code>Real&lt;/code>, &lt;code>Complex&lt;/code>, &lt;code>Matrix&lt;/code>, or &lt;code>MatrixComp&lt;/code>. Additionally, attributes can fall into one of two categories:
+&lt;strong>Static&lt;/strong> attributes have a fixed value which can only be changed explicitly through the attribute&amp;rsquo;s &lt;code>set&lt;/code>-method or through a mutable reference obtained through &lt;code>get&lt;/code>.
+&lt;strong>Dynamic&lt;/strong> attributes on the other hand can dynamically re-compute their value from other attributes every time they are read. This can for example be used to create a scalar attribute of type &lt;code>Real&lt;/code> whose value always contains the magnitude of another, different attribute of type &lt;code>Complex&lt;/code>.&lt;/p>
+&lt;p>Any simulation component or class which inherits from &lt;code>IdentifiedObject&lt;/code> contains an instance of an &lt;code>AttributeList&lt;/code>.
+This list can be used to store all the attributes present in this component and later access them via a &lt;code>String&lt;/code> instead of having to use the member variable directly.
+For reasons of code clarity and runtime safety, the member variables should still be used whenever possible.&lt;/p>
+&lt;h2 id="creating-and-storing-attributes">Creating and Storing Attributes&lt;/h2>
+&lt;p>Normally, a new attribute is created by using the &lt;code>create&lt;/code> or &lt;code>createDynamic&lt;/code> method of an &lt;code>AttributeList&lt;/code> object.
+These two methods will create a new attribute of the given type and insert it into the &lt;code>AttributeList&lt;/code> under the given name. After the name, &lt;code>create&lt;/code> can take an additional parameter of type &lt;code>T&lt;/code> which will be used as the initial value for this attribute.
+Afterwards, a pointer to the attribute is returned which can then be stored in a component&amp;rsquo;s member variable. Usually this is done in the
+component&amp;rsquo;s constructor in an initialization list:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">/// Component class Base::Ph1::PiLine
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">public&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Definition of attributes
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">mSeriesRes&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">mSeriesInd&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">mParallelCap&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">mParallelCond&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Component constructor: Initializes the attributes in the initialization list
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">Base&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">CPS&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">AttributeList&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attributeList&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mSeriesRes&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">attributeList&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">create&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;R_series&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mSeriesInd&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">attributeList&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">create&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;L_series&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mParallelCap&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">attributeList&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">create&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;C_parallel&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mParallelCond&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">attributeList&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">create&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;G_parallel&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">))&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span> &lt;span style="color:#000;font-weight:bold">};&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>When a class has no access to an &lt;code>AttributeList&lt;/code> object (for example the &lt;code>Simulation&lt;/code> class), attributes can instead be created through the
+&lt;code>make&lt;/code> methods on &lt;code>AttributeStatic&amp;lt;T&amp;gt;&lt;/code> and &lt;code>AttributeDynamic&amp;lt;T&amp;gt;&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Simulation class
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">Simulation&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Simulation&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">String&lt;/span> &lt;span style="color:#000">name&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Logger&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Level&lt;/span> &lt;span style="color:#000">logLevel&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mName&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">String&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">name&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mFinalTime&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.001&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mTimeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.001&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mSplitSubnets&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Bool&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mSteadyStateInit&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Bool&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#204a87">false&lt;/span>&lt;span style="color:#000;font-weight:bold">)),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// ...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="working-with-static-attributes">Working with Static Attributes&lt;/h2>
+&lt;p>As stated above, the value of a static attribute can only be changed through the attribute&amp;rsquo;s &lt;code>set&lt;/code>-method or by writing its value through a mutable reference obtained by calling &lt;code>get&lt;/code>. This means that the value will not change between consecutive reads. Because of the performance benefits static
+attributes provide over dynamic attributes, attributes should be static whenever possible.&lt;/p>
+&lt;p>The value of a static attribute can be read by using the attribute&amp;rsquo;s &lt;code>get&lt;/code>-function (i.e. &lt;code>attr-&amp;gt;get&lt;/code>) or by applying the &lt;code>*&lt;/code> operator on the already dereferenced pointer (i.e. &lt;code>**attr&lt;/code>), which is overloaded to also call the &lt;code>get&lt;/code> function. Both methods return a &lt;strong>mutable reference&lt;/strong> to the attribute&amp;rsquo;s value of type &lt;code>T&amp;amp;&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.001&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">get&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read1 = 0.001
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read2 = 0.001
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">read3&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read3 = 0.001
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>The value of an attribute can be changed by either writing to the mutable reference obtained from &lt;code>get&lt;/code>, or by calling the &lt;code>set&lt;/code>-method:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.001&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read1 = 0.001
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0.002&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read2 = 0.002
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">set&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.003&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read3&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read3 = 0.003
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="working-with-dynamic-attributes">Working with Dynamic Attributes&lt;/h2>
+&lt;p>In general, dynamic attributes can be accessed via the same &lt;code>get&lt;/code> and &lt;code>set&lt;/code>-methods described above for static attributes. However,
+dynamic attributes can additionally have &lt;strong>dependencies&lt;/strong> on other attributes which affect the behavior of these methods.
+Usually, this is used to dynamically compute the attribute&amp;rsquo;s value from the value of another attribute. In the simplest case, a dynamic
+attribute can be set to &lt;strong>reference&lt;/strong> another (static or dynamic) attribute using the &lt;code>setReference&lt;/code>-method. After this method has been called,
+the dynamic attribute&amp;rsquo;s value will always reflect the value of the attribute it references:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0.001&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">attr2&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setReference&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">attr1&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr2&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read1 = 0.001
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0.002&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr2&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read2 = 0.002
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>When working with references between multiple dynamic attributes, the direction in which the references are defined can be important:
+References should always be set in such a way that the reference relationships form a one-way chain. Only the last attribute in such a reference chain (which itself does not reference anything) should be modified by external code (i.e. through mutable references or the &lt;code>set&lt;/code>-method). This ensures that changes are always reflected in all attributes in the chain. For example, the following setup might lead to errors because it overwrites an existing reference:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Overwriting an existing reference relationship
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">A&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">B&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">C&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">B&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setReference&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">A&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Current chain: B -&amp;gt; A
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">B&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setReference&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">C&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Current chain: B -&amp;gt; C, reference on A is overwritten
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">C&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0.1&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Change will not be reflected in A
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Correct implementation:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">A&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">B&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">C&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeDynamic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Real&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">B&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setReference&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">A&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Current chain: B -&amp;gt; A
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">C&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setReference&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">B&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Current chain: C -&amp;gt; B -&amp;gt; A
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">A&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0.1&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Updating the last attribute in the chain will update A, B, and C
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Aside from setting references, it is also possible to completely recompute a dynamic attribute&amp;rsquo;s value every time it is read. This can for example be used to create attributes which reference a single matrix coefficient of another attribute, or which represent the magnitude or phase of a complex attribute.
+Dynamic attributes which depend on one other attribute in this way are also called &lt;strong>derived&lt;/strong> attributes, and they can be created by calling one
+of the various &lt;code>derive...&lt;/code> methods on the original attribute:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">AttributeStatic&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">3&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">4&lt;/span>&lt;span style="color:#000;font-weight:bold">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">attr2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">attr1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">deriveMag&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr2&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read1 = 5
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">1&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">read2&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">attr2&lt;/span>&lt;span style="color:#000;font-weight:bold">;&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//read2 = 1
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>There is also a general &lt;code>derive&lt;/code>-method which can take a custom &lt;code>getter&lt;/code> and &lt;code>setter&lt;/code> lambda function for computing the derived attribute from its dependency.
+For more complex cases involving dependencies on multiple attributes, the &lt;code>AttributeDynamic&lt;/code> class has a method called &lt;code>addTask&lt;/code> which can be used to add arbitrary computation tasks which are executed when the attribute is read or written to. For more information, check the method comments in &lt;code>Attribute.h&lt;/code>.&lt;/p>
+&lt;h2 id="using-attributes-for-logging-and-interfacing">Using Attributes for Logging and Interfacing&lt;/h2>
+&lt;p>When setting up a simulation, there are some methods which require an instance of &lt;code>AttributeBase::Ptr&lt;/code> as a parameter. Examples for this
+are the logger methods (e.g. &lt;code>DataLogger::logAttribute&lt;/code>) and &lt;a href="https://sogno-platform.github.io/dpsim/docs/overview/interfaces/">interface&lt;/a> methods (e.g. &lt;code>InterfaceVillas::exportAttribute&lt;/code>). To obtain the
+required attribute pointer, one can either directly access the public member variables of the component the attribute belongs to, or use the component&amp;rsquo;s &lt;code>attribute(String name)&lt;/code> method which will look up the attribute in the component&amp;rsquo;s &lt;code>AttributeList&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">auto&lt;/span> &lt;span style="color:#000">r1&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Resistor&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;r_1&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">r1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">setParameters&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">5&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">auto&lt;/span> &lt;span style="color:#000">logger&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">DataLogger&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;simName&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Access the attribute through the member variable
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">logger&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">logAttribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;i12&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">r1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">mIntfCurrent&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">auto&lt;/span> &lt;span style="color:#000">intf&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make_shared&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">InterfaceVillas&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">config&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Access the attribute through the AttributeList
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">exportAttribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">r1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">attribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#a40000">&amp;#39;&lt;/span>&lt;span style="color:#000">i_intf&lt;/span>&lt;span style="color:#a40000">&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Access the attribute through the member variable and use deriveCoeff to convert it to a scalar value
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">exportAttribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">r1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">mIntfVoltage&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">deriveCoeff&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>When creating a simulation in Python, the component&amp;rsquo;s member variables are usually not accessible, so the &lt;code>attr&lt;/code>-method has to be used for all accesses:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-python" data-lang="python">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic"># dpsim-mqtt.py&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">dpsimpyvillas&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">InterfaceVillas&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">name&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;dpsim-mqtt&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">config&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span>&lt;span style="color:#000">mqtt_config&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">import_attribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">evs&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;V_ref&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87;font-weight:bold">True&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">export_attribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">r12&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;i_intf&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">derive_coeff&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="using-attributes-to-schedule-tasks">Using Attributes to Schedule Tasks&lt;/h2>
 &lt;p>Attributes are also used to determine dependencies of tasks on data, which is information required by the scheduler.
-A task describing its dependencies on attributes could look like this.&lt;/p>
-&lt;pre>&lt;code>class MnaPostStep : public Task {
-public:
-MnaPostStep(Inductor&amp;amp; inductor, Attribute&amp;lt;Matrix&amp;gt;::Ptr leftVector) :
-Task(inductor.mName + &amp;quot;.MnaPostStep&amp;quot;),
-mInductor(inductor), mLeftVector(leftVector) {
-mAttributeDependencies.push_back(mLeftVector);
-mModifiedAttributes.push_back(mInductor.attribute(&amp;quot;v_intf&amp;quot;));
-mModifiedAttributes.push_back(mInductor.attribute(&amp;quot;i_intf&amp;quot;));
-}
-void execute(Real time, Int timeStepCount);
-private:
-Inductor&amp;amp; mInductor;
-Attribute&amp;lt;Matrix&amp;gt;::Ptr mLeftVector;
-};
-&lt;/code>&lt;/pre>
-&lt;p>Here, the MNA post step depends on the solution vector of the system, &lt;code>leftVector&lt;/code>, and modifies &lt;code>v_intf&lt;/code> and &lt;code>i_intf&lt;/code>.
+For the usual &lt;code>MNAPreStep&lt;/code> and &lt;code>MNAPostStep&lt;/code> tasks, these dependencies are configured in the &lt;code>mnaAddPreStepDependencies&lt;/code> and &lt;code>mnaAddPostStepDependencies&lt;/code> methods:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Inductor&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">mnaAddPostStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">leftVector&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfVoltage&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfCurrent&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Here, the MNA post step depends on the solution vector of the system, &lt;code>leftVector&lt;/code>, and modifies &lt;code>mIntfVoltage&lt;/code> and &lt;code>mIntfCurrent&lt;/code>.
 Therefore, this task needs to be scheduled after the system solution that computes &lt;code>leftVector&lt;/code> and before tasks that require the voltage and current interface vectors of the inductance, e.g. the task logging these values.&lt;/p></description></item><item><title>Docs: Scheduling</title><link>https://sogno-platform.github.io/dpsim/docs/overview/scheduling/</link><pubDate>Fri, 01 May 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/overview/scheduling/</guid><description>
 &lt;p>DPsim implements level scheduling.
 A task T4 that depends on data modified by task T1 is scheduled to the level following the level of task T1.
@@ -143,6 +234,7 @@ The general structure looks as follows.&lt;/p>
 &lt;li>&lt;code>Sources/Python/Module.cpp&lt;/code>&lt;/li>
 &lt;/ul></description></item><item><title>Docs: Roadmap</title><link>https://sogno-platform.github.io/dpsim/docs/roadmap/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/roadmap/</guid><description>
 &lt;p>Short-term planning for new features is done on the GitHub &lt;a href="https://github.com/orgs/sogno-platform/projects/1">Project board&lt;/a>.&lt;/p>
+&lt;p>You can also check the &lt;a href="https://github.com/sogno-platform/dpsim/issues">Issues List&lt;/a> or the &lt;a href="https://github.com/sogno-platform/dpsim/pulls">Pull Requests&lt;/a> on GitHub.&lt;/p>
 &lt;h3 id="under-development">Under Development&lt;/h3>
 &lt;ul>
 &lt;li>Solver
@@ -189,9 +281,329 @@ The general structure looks as follows.&lt;/p>
 &lt;/ul></description></item><item><title>Docs: Reference</title><link>https://sogno-platform.github.io/dpsim/docs/reference/</link><pubDate>Tue, 17 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/reference/</guid><description>
 &lt;p>The &lt;a href="https://sogno-platform.github.io/dpsim/sphinx/about.html">Sphinx documentation&lt;/a> describes the Python API.&lt;/p>
 &lt;p>The &lt;a href="https://sogno-platform.github.io/dpsim/doxygen/index.html">Doxygen documentation&lt;/a> is automatically generated from the C++ code using Doxygen.
-It is helpful to understand the general structure of the C++ DPsim core components.&lt;/p></description></item><item><title>Docs: Contribution Guidelines</title><link>https://sogno-platform.github.io/dpsim/docs/contribution-guidelines/</link><pubDate>Tue, 17 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/contribution-guidelines/</guid><description>
+It is helpful to understand the general structure of the C++ DPsim core components.&lt;/p></description></item><item><title>Docs: Contribution Guidelines</title><link>https://sogno-platform.github.io/dpsim/docs/contribution-guidelines/</link><pubDate>Wed, 03 May 2023 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/contribution-guidelines/</guid><description>
 &lt;p>We&amp;rsquo;d love to accept your patches and contributions to this project.
-Please send us a pull request or get in touch with us via mail or slack if you would like to contribute.&lt;/p></description></item><item><title>Docs: Transformer</title><link>https://sogno-platform.github.io/dpsim/docs/models/transformer/</link><pubDate>Thu, 22 Jul 2021 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/models/transformer/</guid><description>
+Please send us a &lt;a href="https://github.com/sogno-platform/dpsim/pulls">pull request&lt;/a> or get in touch with us via mail or &lt;a href="https://lfenergy.slack.com/archives/C054GB551TL">slack&lt;/a> if you would like to contribute.&lt;/p></description></item><item><title>Docs: Build</title><link>https://sogno-platform.github.io/dpsim/docs/getting-started/build/</link><pubDate>Wed, 03 May 2023 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/getting-started/build/</guid><description>
+&lt;h2 id="docker-based">Docker based&lt;/h2>
+&lt;p>Clone the repository&lt;/p>
+&lt;pre>&lt;code>$ git clone git@github.com:sogno-platform/dpsim.git
+&lt;/code>&lt;/pre>
+&lt;p>or using https if you do not have an account&lt;/p>
+&lt;pre>&lt;code>$ git clone https://github.com/sogno-platform/dpsim.git
+&lt;/code>&lt;/pre>
+&lt;p>In the repository, there is a Docker file with all required dependencies&lt;/p>
+&lt;pre>&lt;code>$ cd dpsim
+$ docker build -t sogno/dpsim:dev -f Packaging/Docker/Dockerfile.dev .
+&lt;/code>&lt;/pre>
+&lt;p>Alternatively, the image can be pulled from DockerHub like so&lt;/p>
+&lt;pre>&lt;code>$ docker pull sogno/dpsim:dev
+&lt;/code>&lt;/pre>
+&lt;p>For OS specific instructions on how to install requirements, see the sections below.&lt;/p>
+&lt;p>Next, run a Docker container&lt;/p>
+&lt;pre>&lt;code>$ cd dpsim
+$ docker run -it -p 8888:8888 -v $(pwd):/dpsim --privileged sogno/dpsim:dev bash
+&lt;/code>&lt;/pre>
+&lt;p>The option &lt;code>-p&lt;/code> maps the port 8888 of the container to the docker host. This is required to access the jupyter lab instance inside the container. The option &lt;code>--privileged&lt;/code> is required for debug builds.&lt;/p>
+&lt;p>For Windows, you might need to specify the current directory with curly brackets&lt;/p>
+&lt;pre>&lt;code>$ docker run -it -p 8888:8888 -v ${pwd}:/dpsim --privileged sogno/dpsim:dev bash
+&lt;/code>&lt;/pre>
+&lt;p>Now, you should be in an interactive session inside the docker container.&lt;/p>
+&lt;p>The DPsim C++ and Python library without C++ examples or documentation can be built as follows&lt;/p>
+&lt;pre>&lt;code>$ cd /dpsim
+$ mkdir build &amp;amp;&amp;amp; cd build
+$ cmake ..
+$ cmake --build . --target dpsimpy
+&lt;/code>&lt;/pre>
+&lt;p>If you need other libraries that are not built by default, you need to target them specifically, for example if you need `dpsimpy´ and ´dpsimpyvillas´:&lt;/p>
+&lt;pre>&lt;code>$ cmake --build . --target dpsimpy dpsimpyvillas
+&lt;/code>&lt;/pre>
+&lt;p>To build everything run&lt;/p>
+&lt;pre>&lt;code>$ cmake --build .
+&lt;/code>&lt;/pre>
+&lt;p>To use other libraries that are installed, use the relevant option defined in the CMakeList.txt files, for example for GSL below, and then build as usual:&lt;/p>
+&lt;pre>&lt;code>$ cmake .. -DWITH_GSL=ON
+&lt;/code>&lt;/pre>
+&lt;p>If you would like to use the Python package, it has to be added to the path.
+The following command adds the dpsimpy C++/Python package as well as the dpsim pure Python package.&lt;/p>
+&lt;pre>&lt;code>$ cd /dpsim/build
+$ export PYTHONPATH=$(pwd):$(pwd)/../python/src/
+&lt;/code>&lt;/pre>
+&lt;p>If you are using &lt;code>conda&lt;/code> or other ways to develop with environments, please keep in mind that this will become specific for your setup. For this case, from within the environment already active:&lt;/p>
+&lt;pre>&lt;code>$ cd /dpsim/build
+$ conda develop $(pwd) &amp;amp;&amp;amp; conda develop $(pwd)/Source/Python &amp;amp;&amp;amp; conda develop $(pwd)/../Source/Python
+&lt;/code>&lt;/pre>
+&lt;p>To run jupyter lab&lt;/p>
+&lt;pre>&lt;code>$ cd /dpsim
+$ jupyter lab --ip=&amp;quot;0.0.0.0&amp;quot; --allow-root --no-browser
+&lt;/code>&lt;/pre>
+&lt;p>To install dpsim run&lt;/p>
+&lt;pre>&lt;code>$ cd /dpsim/build
+$ sudo make install
+&lt;/code>&lt;/pre>
+&lt;h2 id="cmake-for-linux">CMake for Linux&lt;/h2>
+&lt;p>The most recent list of requirements can be found in the Dockerfiles.&lt;/p>
+&lt;p>Make sure that the required dependencies are installed.
+The &lt;a href="https://github.com/sogno-platform/dpsim/blob/c40e283338574e0ba7cd9861c70f1e41aa3399ba/packaging/Shell/install-fedora-deps.sh">fedora installation script&lt;/a> in the DPsim repository is a good place to start from.&lt;/p>
+&lt;p>&lt;strong>Note:&lt;/strong> There are currently no Debian packages for &lt;code>villas-node&lt;/code> and &lt;code>libcimpp16v29a&lt;/code>.
+If you want to use these optional feature, you have to build them manually.&lt;/p>
+&lt;p>Install Sundials&lt;/p>
+&lt;pre>&lt;code>$ git clone --branch v3.1.1 https://github.com/LLNL/sundials.git
+$ mkdir sundials/build
+$ pushd sundials/build
+$ cmake .. \
+-DBUILD_SHARED_LIBS=ON \
+-DBUILD_STATIC_LIBS=OFF \
+-DEXAMPLES_ENABLE_C=OFF
+$ make -j$(nproc) install
+$ popd
+&lt;/code>&lt;/pre>
+&lt;p>The following steps to clone, build and install are the same as for the Docker setup.&lt;/p>
+&lt;h2 id="cmake-for-windows">CMake for Windows&lt;/h2>
+&lt;p>Make sure that the required dependecies are installed:&lt;/p>
+&lt;ul>
+&lt;li>Visual Studio 2017 with C++ Desktop development package&lt;/li>
+&lt;li>&lt;a href="https://cmake.org/">CMake&lt;/a> for Windows&lt;/li>
+&lt;li>&lt;a href="https://git-scm.com/download/win">Git for Windows&lt;/a>&lt;/li>
+&lt;li>For Python support, install Python3, for example, Anaconda, and add Python to your PATH.&lt;/li>
+&lt;/ul>
+&lt;p>Clone the project as explained for Docker.&lt;/p>
+&lt;p>Open a windows command prompt and navigate into the new DPsim folder.
+Generate a Visual Studio project with CMake and use it to build the project&lt;/p>
+&lt;pre>&lt;code>$ mkdir build
+$ cd build
+$ cmake -G &amp;quot;Visual Studio 15 2017 Win64&amp;quot; ..
+&lt;/code>&lt;/pre>
+&lt;p>Open Visual Studio and load the Visual Studio project from the build directory within the DPsim folder.&lt;/p>
+&lt;p>You can either build the project from within Visual Studio or from the command line by running the following command in the windows command prompt&lt;/p>
+&lt;pre>&lt;code>$ cmake --build .
+&lt;/code>&lt;/pre>
+&lt;p>To install the Python package use Visual Studio and the Release configuration to build the DPsim Python module and then build the INSTALL project.&lt;/p>
+&lt;h2 id="cmake-for-macos">CMake for macOS&lt;/h2>
+&lt;p>Make sure that the required dependecies are installed&lt;/p>
+&lt;pre>&lt;code>$ /usr/bin/ruby -e &amp;quot;$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)&amp;quot;
+$ brew install gcc9 git cmake graphviz python3 gsl eigen spdlog
+$ sudo pip3 install numpy
+&lt;/code>&lt;/pre>
+&lt;p>Clone the source as explained for the Docker setup.&lt;/p>
+&lt;p>Compile&lt;/p>
+&lt;pre>&lt;code>$ mkdir build
+$ cmake ..
+$ make -j$(sysctl -n hw.ncpu)
+&lt;/code>&lt;/pre>
+&lt;p>To install the generated Python module to your system&lt;/p>
+&lt;pre>&lt;code>$ sudo make install
+&lt;/code>&lt;/pre>
+&lt;h2 id="python-package-for-pypi">Python Package for pypi&lt;/h2>
+&lt;p>Follow the previous steps to set up the Docker container.&lt;/p>
+&lt;p>To build the Python package run&lt;/p>
+&lt;pre>&lt;code>$ python3 setup.py bdist_wheel
+&lt;/code>&lt;/pre>
+&lt;h2 id="documentation">Documentation&lt;/h2>
+&lt;h3 id="python">Python&lt;/h3>
+&lt;p>Install &lt;a href="https://www.sphinx-doc.org/en/master/">Sphinx&lt;/a> or use the Docker image.&lt;/p>
+&lt;p>Generate the Python documentation by running Sphinx via CMake:&lt;/p>
+&lt;pre>&lt;code>$ mkdir -p build &amp;amp;&amp;amp; cd build
+$ cmake ..
+$ make docs
+&lt;/code>&lt;/pre>
+&lt;p>The resulting documentation will be generated in &lt;code>Documentation/html/&lt;/code>.&lt;/p>
+&lt;h3 id="c">C++&lt;/h3>
+&lt;p>Install &lt;a href="http://www.doxygen.nl/">Doxygen&lt;/a> or use the Docker image.&lt;/p>
+&lt;p>Generate the C++ documentation by running Doxygen via CMake:&lt;/p>
+&lt;pre>&lt;code>$ mkdir -p build &amp;amp;&amp;amp; cd build
+$ cmake ..
+$ make docs_cxx
+&lt;/code>&lt;/pre>
+&lt;p>The resulting documentation will be generated in &lt;code>Documentation/html/Cxx&lt;/code>.&lt;/p></description></item><item><title>Docs: Interfacing with the MNA Solver</title><link>https://sogno-platform.github.io/dpsim/docs/overview/mnainterface/</link><pubDate>Mon, 19 Dec 2022 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/overview/mnainterface/</guid><description>
+&lt;p>The various solver classes based on &lt;code>MNASolver&lt;/code> are used to perform &lt;a href="https://sogno-platform.github.io/dpsim/docs/concepts/nodal-analysis/">Nodal Analysis&lt;/a> during a DPsim simulation. For components to be able to influence the input variables of the MNA, they have to implement certain methods defined in the &lt;code>MNAInterface&lt;/code> interface class. While it is possible to individually implement &lt;code>MNAInterface&lt;/code> for every
+component, the behavior of many components can be unified in a common base class. This base class is called &lt;code>MNASimPowerComp&amp;lt;T&amp;gt;&lt;/code>.
+Currently, it is the only class which directly implements &lt;code>MNAInterface&lt;/code> and in turn all MNA components inherit from this class.
+Much like the &lt;code>CompositePowerComp&lt;/code> class for &lt;a href="https://sogno-platform.github.io/dpsim/docs/overview/subcomponents/">Composite Components&lt;/a>, the &lt;code>MNASimPowerComp&lt;/code> class
+provides some common behavior for all MNA components, e.g. the creation and registration of the &lt;code>MNAPreStep&lt;/code> and &lt;code>MNAPostStep&lt;/code> tasks.
+Additionally, &lt;code>MNASimPowerComp&lt;/code> provides a set of virtual methods prefixed &lt;code>mnaComp...&lt;/code> which can be implemented by the child component classes to provide their own MNA behavior. These methods are:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompInitialize&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">omega&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">timeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompApplySystemMatrixStamp&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">SparseMatrixRow&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">systemMatrix&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompApplyRightSideVectorStamp&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">rightVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompUpdateVoltage&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompUpdateCurrent&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#204a87;font-weight:bold">const&lt;/span> &lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompPreStep&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">time&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Int&lt;/span> &lt;span style="color:#000">timeStepCount&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompPostStep&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">time&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Int&lt;/span> &lt;span style="color:#000">timeStepCount&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompAddPreStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompAddPostStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompInitializeHarm&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">omega&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">timeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">vector&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span> &lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompApplySystemMatrixStampHarm&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">SparseMatrixRow&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">systemMatrix&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Int&lt;/span> &lt;span style="color:#000">freqIdx&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompApplyRightSideVectorStampHarm&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">sourceVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">virtual&lt;/span> &lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">mnaCompApplyRightSideVectorStampHarm&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span> &lt;span style="color:#000">sourceVector&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Int&lt;/span> &lt;span style="color:#000">freqIdx&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>MNASimPowerComp&lt;/code> provides empty default implementations for all of these methods, so component classes are not forced to implement any of them.&lt;/p>
+&lt;h2 id="controlling-common-base-class-behavior">Controlling Common Base Class Behavior&lt;/h2>
+&lt;p>Child component classes can control the behavior of the base class through the constructor arguments of &lt;code>MNASimPowerComp&lt;/code>.
+The two boolean variables &lt;code>hasPreStep&lt;/code> and &lt;code>hasPostStep&lt;/code> can be used to control whether the &lt;code>MNAPreStep&lt;/code> and &lt;code>MNAPostStep&lt;/code> tasks will be created and registered.
+If these tasks are created, the &lt;code>mnaCompPreStep&lt;/code> / &lt;code>mnaCompPostStep&lt;/code> and &lt;code>mnaCompAddPreStepDependencies&lt;/code> / &lt;code>mnaCompAddPostStepDependencies&lt;/code> methods will be called during the component&amp;rsquo;s lifecycle.
+If the tasks are not created, these methods are superfluous and should not be implemented in the child class.&lt;/p>
+&lt;p>Currently, the &lt;code>MNASimPowerComp&lt;/code> base class only exhibits additional behavior over the &lt;code>mnaComp...&lt;/code> methods in the &lt;code>mnaInitialize&lt;/code> method. In this method, the list of MNA tasks is cleared, and the new tasks are added according to the &lt;code>hasPreStep&lt;/code> and &lt;code>hasPostStep&lt;/code> parameters. Additionally, the right vector attribute &lt;code>mRightVector&lt;/code> required by &lt;code>MNAInterface&lt;/code> is set to a zero-vector with its length equal to that of the system &lt;code>leftVector&lt;/code>.
+If this behavior is not desired, e.g. for resistors which have no influence on the system right vector, the right vector can be re-set to have zero size in the &lt;code>mnaCompInitialize&lt;/code> method:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Resistor&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">mnaCompInitialize&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">omega&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">timeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Attribute&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;::&lt;/span>&lt;span style="color:#000">Ptr&lt;/span> &lt;span style="color:#000">leftVector&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">updateMatrixNodeIndices&lt;/span>&lt;span style="color:#000;font-weight:bold">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">mRightVector&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">Matrix&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Zero&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>For all other MNA methods, the &lt;code>MNASimPowerComp&lt;/code> base class will just call the associated &lt;code>mnaComp...&lt;/code> method. For more details, take a look at the implementations in &lt;code>MNASimPowerComp.cpp&lt;/code>.&lt;/p></description></item><item><title>Docs: Subcomponent Handling</title><link>https://sogno-platform.github.io/dpsim/docs/overview/subcomponents/</link><pubDate>Wed, 14 Dec 2022 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/overview/subcomponents/</guid><description>
+&lt;p>In DPsim, there are many components which can be broken down into individual subcomponents. Examples are the &lt;code>PiLine&lt;/code>, consisting of an inductor, three resistors, and two capacitors, or the &lt;code>NetworkInjection&lt;/code> which contains a voltage source.
+On the C++ class level, these subcomponents are represented by member variables within the larger component class. In this guide, all components which have subcomponents are called &lt;strong>composite components&lt;/strong>.&lt;/p>
+&lt;h2 id="creating-composite-components">Creating Composite Components&lt;/h2>
+&lt;p>While normal components are usually subclasses of &lt;code>SimPowerComp&amp;lt;T&amp;gt;&lt;/code> or &lt;code>MNASimPowerComp&amp;lt;T&amp;gt;&lt;/code>, there exists a special base class for composite
+components called &lt;code>CompositePowerComp&amp;lt;T&amp;gt;&lt;/code>. This class provides multiple methods and parameters for configuring how the subcomponents should be
+handled with respect to the &lt;code>MNAPreStep&lt;/code> and &lt;code>MNAPostStep&lt;/code> tasks.
+The main idea here is that the subcomponents do not register their own MNA tasks, but instead their MNA methods like &lt;code>mnaPreStep&lt;/code> and &lt;code>mnaPostStep&lt;/code> are called explicitly in the tasks of the composite component.
+In the constructor of &lt;code>CompositePowerComp&amp;lt;T&amp;gt;&lt;/code>, the parameters &lt;code>hasPreStep&lt;/code> and &lt;code>hasPostStep&lt;/code> can
+be set to automatically create and register a &lt;code>MNAPreStep&lt;/code> or &lt;code>MNAPostStep&lt;/code> task that will call the &lt;code>mnaCompPreStep&lt;/code> or &lt;code>mnaCompPostStep&lt;/code> method on execution.
+Additionally, all subcomponents should be registered as soon as they are created using the &lt;code>addMNASubComponent&lt;/code>-method. This method takes
+multiple parameters defining how and in what order the subcomponent&amp;rsquo;s pre- and post- steps should be called, as well as if the subcomponent
+should be stamped into the system &lt;code>rightVector&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// DP_Ph1_PiLine.cpp
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">String&lt;/span> &lt;span style="color:#000">uid&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">String&lt;/span> &lt;span style="color:#000">name&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">Logger&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Level&lt;/span> &lt;span style="color:#000">logLevel&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#000">Base&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Call the constructor of CompositePowerComp and enable automatic pre- and post-step creation
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">CompositePowerComp&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">uid&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">name&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">logLevel&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">initializeFromNodesAndTerminals&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">Real&lt;/span> &lt;span style="color:#000">frequency&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// Create series sub components
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">mSubSeriesResistor&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make_shared&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Resistor&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">mName&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">+&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;_res&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">mLogLevel&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Setup mSubSeriesResistor...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Register the resistor as a subcomponent. The resistor&amp;#39;s pre- and post-step will be called before the pre- and post-step of the parent,
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// and the resistor does not contribute to the `rightVector`.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">addMNASubComponent&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mSubSeriesResistor&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">MNA_SUBCOMP_TASK_ORDER&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">TASK_BEFORE_PARENT&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">MNA_SUBCOMP_TASK_ORDER&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">TASK_BEFORE_PARENT&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">false&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">mSubSeriesInductor&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make_shared&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Inductor&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">**&lt;/span>&lt;span style="color:#000">mName&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">+&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;_ind&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">mLogLevel&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Setup mSubSeriesInductor...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// Register the inductor as a subcomponent. The inductor&amp;#39;s pre- and post-step will be called before the pre- and post-step of the parent,
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#8f5902;font-style:italic">// and the inductor does contribute to the `rightVector`.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">addMNASubComponent&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mSubSeriesInductor&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">MNA_SUBCOMP_TASK_ORDER&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">TASK_BEFORE_PARENT&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">MNA_SUBCOMP_TASK_ORDER&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">TASK_BEFORE_PARENT&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="orchestrating-mna-method-calls">Orchestrating MNA Method Calls&lt;/h2>
+&lt;p>By choosing which methods to override in the composite component class, subcomponent handling can either be offloaded to the &lt;code>CompositePowerComp&lt;/code> base class or manually implemented in the new component class. By default, &lt;code>CompositePowerComp&lt;/code> provides all
+methods demanded by &lt;code>MNAInterface&lt;/code> in such a way that the subcomponents&amp;rsquo; MNA-methods are properly called. To also allow for the composite
+component class to perform further actions in these MNA-methods, there exist multiple methods prefixed with &lt;code>mnaParent&lt;/code>, e.g. &lt;code>mnaParentPreStep&lt;/code> or &lt;code>mnaParentAddPostStepDependencies&lt;/code>.
+These parent methods will usually be called after the respective method has been called on the subcomponents. For the &lt;code>mnaPreStep&lt;/code> and
+&lt;code>mnaPostStep&lt;/code> methods, this behavior can be set explicitly in the &lt;code>addMNASubComponent&lt;/code> method.&lt;/p>
+&lt;p>If a composite component requires a completely custom implementation of some MNA-method, e.g. for skipping certain subcomponents or for
+calling the subcomponent&amp;rsquo;s methods in a different order, the composite component class can still override the original MNA-method with the &lt;code>mnaComp&lt;/code> prefix instead of the
+&lt;code>mnaParent&lt;/code> prefix. This will prevent the &lt;code>CompositePowerComp&lt;/code> base class from doing any subcomponent handling in this specific MNA-method,
+so the subcomponent method calls have to be performed explicitly if desired. Given this, the following two implementations of the &lt;code>mnaAddPreStepDependencies&lt;/code> method are equivalent:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">mnaParentAddPreStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// only add the dependencies of the composite component, the subcomponent&amp;#39;s dependencies are handled by the base class
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfCurrent&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfVoltage&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mRightVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#204a87;font-weight:bold">void&lt;/span> &lt;span style="color:#000">DP&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">Ph1&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">PiLine&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">mnaCompAddPreStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">AttributeBase&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">List&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">&amp;amp;&lt;/span>&lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// manually add pre-step dependencies of subcomponents
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#204a87;font-weight:bold">for&lt;/span> &lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#204a87;font-weight:bold">auto&lt;/span> &lt;span style="color:#f57900">subComp&lt;/span> &lt;span style="color:#000;font-weight:bold">:&lt;/span> &lt;span style="color:#000">mSubcomponentsMNA&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">subComp&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">mnaAddPreStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">attributeDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#8f5902;font-style:italic">// add pre-step dependencies of component itself
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span> &lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfCurrent&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">prevStepDependencies&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mIntfVoltage&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000">modifiedAttributes&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">push_back&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mRightVector&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div></description></item><item><title>Docs: Interfaces</title><link>https://sogno-platform.github.io/dpsim/docs/overview/interfaces/</link><pubDate>Tue, 13 Dec 2022 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/overview/interfaces/</guid><description>
+&lt;p>Interfaces can be used to share data between a DPsim simulation and other, external services, for example an MQTT-broker. For the purpose of this guide, all services receiving and transmitting data besides the running DPsim instance are grouped in the term &lt;strong>environment&lt;/strong>. Therefore, interfaces
+provide a way for a DPsim simulation to exchange data with the environment.
+This data is stored in the form of &lt;a href="https://sogno-platform.github.io/dpsim/docs/overview/attributes/">Attributes&lt;/a> and can be &lt;strong>imported&lt;/strong> or &lt;strong>exported&lt;/strong> in every simulation time step. Exporting an attribute means that on every time step, the current value of that attribute is read and written out to the environment.
+Importing an attribute means that on every time step, a new value is read from the environment and the attribute in the simulation is updated to match this value.&lt;/p>
+&lt;h2 id="configuring-an-interface">Configuring an Interface&lt;/h2>
+&lt;p>On the configuration level, an interface is an instance of the &lt;code>Interface&lt;/code> class.
+Because the base &lt;code>Interface&lt;/code> class requires an instance of an &lt;code>InterfaceWorker&lt;/code> to construct, it is recommended to not use this base class directly,
+but instead construct a subclass derived from &lt;code>Interface&lt;/code> which internally handles the construction of the &lt;code>InterfaceWorker&lt;/code>. Currently, there exists
+only one such subclass in DPsim which is the &lt;code>InterfaceVillas&lt;/code>.&lt;/p>
+&lt;h3 id="configuring-the-interfacevillas">Configuring the InterfaceVillas&lt;/h3>
+&lt;blockquote>
+&lt;p>This feature requires the compilation of DPsim with the &lt;code>WITH_VILLAS&lt;/code> feature flag. For use of the &lt;code>InterfaceVillas&lt;/code> in python, the &lt;code>dpsimpyvillas&lt;/code> target has to built in addition to the normal &lt;code>dpsimpy&lt;/code> package.&lt;/p>
+&lt;/blockquote>
+&lt;p>The &lt;code>InterfaceVillas&lt;/code> is an interface designed to make use of the various node types and protocols supported by the &lt;a href="https://github.com/VILLASframework/node">VILLASframework&lt;/a>. By utilizing the nodes provided by VILLASnode, the &lt;code>InterfaceVillas&lt;/code> can be configured to import and export attributes from and to a wide range of external services. To create and configure an &lt;code>InterfaceVillas&lt;/code> instance, create a new shared pointer of type &lt;code>InterfaceVillas&lt;/code> and supply it with a configuration string in the first constructor argument. This configuration must be a valid JSON object containing the settings for the &lt;code>VILLASnode&lt;/code> node that should be used for data import and export.
+This means that the JSON contains a &lt;code>type&lt;/code> key describing what node type to use, as well as any additional configuration options required for this node type. The valid configuration keys can be found in the &lt;a href="https://villas.fein-aachen.org/doc/node-node-types.html">VILLASnode documentation&lt;/a>.&lt;/p>
+&lt;p>After the &lt;code>InterfaceVillas&lt;/code> object is created, the &lt;code>exportAttribute&lt;/code> and &lt;code>importAttribute&lt;/code> methods can be used to set up the data exchange between
+the DPsim simulation and the configured node. For an explanation of the various parameters, see the code documentation in &lt;code>InterfaceVillas.h&lt;/code>. The attributes given as the first parameter to these methods are attributes belonging to components in the simulation which should be read or updated by the interface.
+As an example, for exporting and importing attributes via the MQTT protocol, the &lt;code>InterfaceVillas&lt;/code> can be configured as follows:&lt;/p>
+&lt;p>Using C++:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// JSON configuration adhering to the VILLASnode documentation
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">string&lt;/span> &lt;span style="color:#000">mqttConfig&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">R&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;STRING({&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;type&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;mqtt&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;format&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;json&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;host&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;mqtt&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;in&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;subscribe&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;/mqtt-dpsim&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000;font-weight:bold">},&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;out&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#000;font-weight:bold">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#4e9a06">&amp;#34;publish&amp;#34;&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">:&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;/dpsim-mqtt&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#000;font-weight:bold">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000;font-weight:bold">})&lt;/span>&lt;span style="color:#000">STRING&lt;/span>&lt;span style="color:#4e9a06">&amp;#34;;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Creating a new InterfaceVillas object
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">shared_ptr&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">InterfaceVillas&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span> &lt;span style="color:#000">intf&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">std&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">::&lt;/span>&lt;span style="color:#000">make_shared&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">InterfaceVillas&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">mqttConfig&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Configuring the InterfaceVillas to import and export attributes
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">importAttribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">evs&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">mVoltageRef&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">exportAttribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">r12&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">mIntfCurrent&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">-&amp;gt;&lt;/span>&lt;span style="color:#000">deriveCoeff&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;lt;&lt;/span>&lt;span style="color:#000">Complex&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">&amp;gt;&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">1&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87">true&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#4e9a06">&amp;#34;v_load&amp;#34;&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Using Python:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-python" data-lang="python">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic"># JSON configuration adhering to the VILLASnode documentation&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">mqtt_config&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#4e9a06">&amp;#39;&amp;#39;&amp;#39;{
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;type&amp;#34;: &amp;#34;mqtt&amp;#34;,
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;format&amp;#34;: &amp;#34;json&amp;#34;,
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;host&amp;#34;: &amp;#34;mqtt&amp;#34;,
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;in&amp;#34;: {
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;subscribe&amp;#34;: &amp;#34;/mqtt-dpsim&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> },
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;out&amp;#34;: {
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> &amp;#34;publish&amp;#34;: &amp;#34;/dpsim-mqtt&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06"> }
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#4e9a06">}&amp;#39;&amp;#39;&amp;#39;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic"># Creating a new InterfaceVillas object&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#000">dpsimpyvillas&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">InterfaceVillas&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">name&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;dpsim-mqtt&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#000">config&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span>&lt;span style="color:#000">mqtt_config&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic"># Configuring the InterfaceVillas to import and export attributes&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">import_attribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">evs&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;V_ref&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#204a87;font-weight:bold">True&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">export_attribute&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">r12&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">attr&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#4e9a06">&amp;#39;i_intf&amp;#39;&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>&lt;span style="color:#ce5c00;font-weight:bold">.&lt;/span>&lt;span style="color:#000">derive_coeff&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">,&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">),&lt;/span> &lt;span style="color:#0000cf;font-weight:bold">0&lt;/span>&lt;span style="color:#000;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="adding-an-interface-to-the-simulation">Adding an Interface to the Simulation&lt;/h2>
+&lt;p>After a new interface has been created and configured, it can be added to a simulation using the &lt;code>Simulation::addInterface&lt;/code> method:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#f8f8f8;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-cpp" data-lang="cpp">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Create and configure simulation
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">RealTimeSimulation&lt;/span> &lt;span style="color:#000">sim&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">simName&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">sim&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">setSystem&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">sys&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">sim&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">setTimeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">timeStep&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#000">sim&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">setFinalTime&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#0000cf;font-weight:bold">10.0&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Create and configure interface
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#204a87;font-weight:bold">auto&lt;/span> &lt;span style="color:#000">intf&lt;/span> &lt;span style="color:#ce5c00;font-weight:bold">=&lt;/span> &lt;span style="color:#8f5902;font-style:italic">//...
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">// Add interface to simulation
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#8f5902;font-style:italic">&lt;/span>&lt;span style="color:#000">sim&lt;/span>&lt;span style="color:#000;font-weight:bold">.&lt;/span>&lt;span style="color:#000">addInterface&lt;/span>&lt;span style="color:#000;font-weight:bold">(&lt;/span>&lt;span style="color:#000">intf&lt;/span>&lt;span style="color:#000;font-weight:bold">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This method will add two new &lt;a href="https://sogno-platform.github.io/dpsim/docs/overview/scheduling/">Tasks&lt;/a> to the simulation. The interface&amp;rsquo;s &lt;code>PreStep&lt;/code> task is set to modify all attributes that are imported from the environment and is therefore scheduled to execute before any other simulation tasks that depend on these attributes.
+The interface&amp;rsquo;s &lt;code>PostStep&lt;/code> task is set to depend on all attributes that are exported to the environment and is therefore scheduled to execute after any other simulation tasks that might modify these attributes. To prevent the scheduler from just dropping the &lt;code>PostStep&lt;/code> task since it does not modify any attributes and is therefore not seen as relevant to the simulation, the task is set to modify the &lt;code>Scheduler::external&lt;/code> attribute.
+Note that the execution of these tasks might not necessarily coincide with the point in time at which the values are actually written out to or read from the environment.
+This is because the interface internally spawns two new threads for exchanging data with the environment and then uses a &lt;strong>lock-free queue&lt;/strong> for communication between these reader and writer threads, and the simulation. Because of this, time-intensive import or export operations will not block
+the main simulation thread unless this is explicitly configured in the interface&amp;rsquo;s &lt;code>importAttribute&lt;/code> and &lt;code>exportAttribute&lt;/code> methods.&lt;/p>
+&lt;h2 id="synchronizing-the-simulation-with-the-environment">Synchronizing the Simulation with the Environment&lt;/h2>
+&lt;p>To allow for synchronizing the DPsim simulation with external services, the &lt;code>Interface&lt;/code> class provides some additional configuration options in the &lt;code>importAttribute&lt;/code> and &lt;code>exportAttribute&lt;/code> methods. For imports, setting the &lt;code>blockOnRead&lt;/code> parameter will completely halt the simulation at the start of
+every time step until a new value for this attribute was read from the environment. Additionally, the &lt;code>syncOnSimulationStart&lt;/code> parameter can be set for every
+import to indicate that this attribute is used to synchronize the start of the simulation. When a simulation contains any interfaces importing attributes
+which have &lt;code>syncOnSimulationStart&lt;/code> set, the &lt;code>Simulation::sync&lt;/code> will be called before the first time step. This method will:&lt;/p>
+&lt;ul>
+&lt;li>write out all attributes configured for export to the environment&lt;/li>
+&lt;li>block until all attributes with &lt;code>syncOnSimulationStart&lt;/code> set have been read from the environment at least once&lt;/li>
+&lt;li>write out all exported attributes again&lt;/li>
+&lt;/ul>
+&lt;p>Note that this setting operates independently of the &lt;code>blockOnRead&lt;/code> flag. This means that with both flags set, the simulation will block again after the synchronization at the start of the first time step until another value is received for the attribute in question.&lt;/p></description></item><item><title>Docs: Transformer</title><link>https://sogno-platform.github.io/dpsim/docs/models/transformer/</link><pubDate>Thu, 22 Jul 2021 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/models/transformer/</guid><description>
 &lt;h2 id="2-winding-transformer">2-Winding Transformer&lt;/h2>
 &lt;p>The transformer model is composed of an RL-segment and an ideal transformer.
 The single line diagram is depicted in the figure below.&lt;/p>
@@ -199,13 +611,12 @@ The single line diagram is depicted in the figure below.&lt;/p>
 &lt;p>If node reduction is not applied, two virtual nodes are created to stamp this model into the system matrix.&lt;/p>
 &lt;p>Furthermore, the ideal transformer has an additional equation, which requires an extension of the system matrix.
 The complete matrix stamp for the ideal transformer is&lt;/p>
-&lt;p>$$
-\begin{array}{c|c c c}
-~ &amp;amp; j &amp;amp; k &amp;amp; l \cr
+&lt;div class="math">$$\begin{array}{c|c c c}
+~ &amp; j &amp; k &amp; l \cr
 \hline
-j &amp;amp; &amp;amp; &amp;amp; -1 \cr
-k &amp;amp; &amp;amp; &amp;amp; T \cr
-l &amp;amp; 1 &amp;amp; -T &amp;amp; 0
+j &amp; &amp; &amp; -1 \cr
+k &amp; &amp; &amp; T \cr
+l &amp; 1 &amp; -T &amp; 0
 \end{array}
 \begin{pmatrix}
 v_j \cr
@@ -217,9 +628,7 @@ i_{l} \cr
 \cr
 \cr
 0\cr
-\end{pmatrix}
-$$&lt;/p>
-&lt;p>The variable $j$ denotes the high voltage node while $k$ is the low voltage node.
+\end{pmatrix} $$&lt;/div>&lt;p>The variable $j$ denotes the high voltage node while $k$ is the low voltage node.
 $l$ indicates the inserted row and column to accommodate the relation between the two voltages at the ends of the transformer.
 The transformer ratio is defined as $T = V_{j} / V_{k}$.
 A phase shift can be introduced if $T$ is considered as a complex number.&lt;/p></description></item><item><title>Docs: Create New Simulation</title><link>https://sogno-platform.github.io/dpsim/docs/tasks/create-simulation/</link><pubDate>Wed, 25 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/tasks/create-simulation/</guid><description>
@@ -255,7 +664,7 @@ A few years later, dynamic phasors were also employed for power system simulatio
 In &lt;a href="https://ieeexplore.ieee.org/document/4026700">Strunz2006&lt;/a> the authors combine the dynamic phasor approach with the Electromagnetic Transients Program (EMTP) simulator concept which includes Modified Nodal Analysis (MNA).
 Further research topics include fault and stability analysis under unbalanced conditions as presented in &lt;a href="https://ieeexplore.ieee.org/document/871734">Stankovic2000&lt;/a> and also rotating machine models have been developed in dynamic phasors &lt;a href="https://ieeexplore.ieee.org/document/4282063">Zhang 2007&lt;/a>.&lt;/p>
 &lt;h2 id="bandpass-signals-and-baseband-representation">Bandpass Signals and Baseband Representation&lt;/h2>
-&lt;p>Although here, dynamic phasors are presented as a power system modelling tool, it should be noted that the concept is also known in other domains, for example, microwave and communications engineering [Maas2003, Suarez2009, Haykin2009, Proakis2001].
+&lt;p>Although here, dynamic phasors are presented as a power system modelling tool, it should be noted that the concept is also known in other domains, for example, microwave and communications engineering &lt;a href="https://ieeexplore.ieee.org/document/9100822">Maas2003&lt;/a>, &lt;a href="https://ieeexplore.ieee.org/book/5236646">Suarez2009&lt;/a>, &lt;a href="https://isbnsearch.org/isbn/9780471697909">Haykin2009&lt;/a>, &lt;a href="https://isbnsearch.org/isbn/0131589326">Proakis2001&lt;/a>.
 In these domains, the approach is often denoted as base band representation or complex envelope.
 Another common term coming from power electrical engineering is shifted frequency analysis (SFA).
 In the following, the general approach of dynamic phasors for power system simulation is explained starting from the idea of bandpass signals.
@@ -284,15 +693,6 @@ A circuit can be solved using Nodal Analysis as follows&lt;/p>
 &lt;/ul>
 &lt;p>The resulting equations can be written in matrix form and have to be solved for $v$.
 $$\boldsymbol{Y} \boldsymbol{v} = \boldsymbol{i}$$&lt;/p></description></item><item><title>Docs: Powerflow</title><link>https://sogno-platform.github.io/dpsim/docs/concepts/powerflow/</link><pubDate>Wed, 18 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/concepts/powerflow/</guid><description>
-&lt;script>
-MathJax = {
-tex: {
-tags: 'all'
-}
-};
-&lt;/script>
-&lt;script src="https://polyfill.io/v3/polyfill.min.js?features=es6">&lt;/script>
-&lt;script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">&lt;/script>
 &lt;p>The power flow problem is about the calculation of voltage magnitudes and angles for one set of buses.
 The solution is obtained from a given set of voltage magnitudes and power levels for a specific model of the network configuration.
 The power flow solution exhibits the voltages and angles at all buses and real and reactive flows can be deduced from the same.&lt;/p>
@@ -364,85 +764,78 @@ Futhermore, the solution vector $\vec{x}$ will represent $\vec{V}$ either by pol
 &lt;p>The injected power at a node $k$ is given by:
 $$S_{k} = V_{k} I _{k}^{*}$$&lt;/p>
 &lt;p>The current injection into any bus $k$ may be expressed as:
-$$I_{k} = \sum_{j=1}^{N} Y_{kj} V_{j}$$&lt;/p>
-&lt;p>Substitution yields:
-\begin{align}
-S_{k} =&amp;amp; V_{k} \left ( \sum_{j=1}^{N} Y_{kj} V_{j} \right )^{&lt;em>}
-=&amp;amp; V_{k} \sum_{j=1}^{N} Y_{kj}^{&lt;/em>} V_{j} ^{*}
-\end{align}&lt;/p>
-&lt;p>We may define $G_{kj}$ and $B_{kj}$ as the real and imaginary parts of the admittance matrix element $Y_{kj}$ respectively, so that $Y_{kj} = G_{kj} + jB_{kj}$.
-Then we may rewrite the last equation:
-\begin{align}
-S_{k} &amp;amp;= V_{k} \sum_{j=1}^{N} Y_{kj}^{&lt;em>} V_{j}^{&lt;/em>} \nonumber \
-&amp;amp;= \vert V_{k} \vert \angle \theta_{k} \sum_{j=1}^{N} (G_{kj} + jB_{kj})^{&lt;em>} ( \vert V_{j} \vert \angle \theta_{j})^{&lt;/em>} \nonumber \
-&amp;amp;= \vert V_{k} \vert \angle \theta_{k} \sum_{j=1}^{N} (G_{kj} - jB_{kj}) ( \vert V_{j} \vert \angle - \theta_{j}) \nonumber \
-&amp;amp;= \sum_{j=1} ^{N} \vert V_{k} \vert \angle \theta_{k} ( \vert V_{j} \vert \angle - \theta_{j}) (G_{kj} - jB_{kj}) \nonumber \
-&amp;amp;= \sum_{j=1} ^{N} \left ( \vert V_{k} \vert \vert V_{j} \vert \angle (\theta_{k} - \theta_{j}) \right ) (G_{kj} - jB_{kj}) \nonumber \
-&amp;amp;= \sum_{j=1} ^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( cos(\theta_{k} - \theta_{j}) + jsin(\theta_{k} - \theta_{j}) \right ) (G_{kj} - jB_{kj})
-\label{eq:compl_power}
-\end{align}&lt;/p>
-&lt;p>If we now perform the algebraic multiplication of the two terms inside the parentheses, and collect real and imaginary parts, and recall that $S_{k} = P_{k} + jQ_{k}$, we can express $\eqref{eq:compl_power}$ as two equations: one for the real part, $P_{k}$, and one for the imaginary part, $Q_{k}$, according to:&lt;/p>
-&lt;p>\begin{align}
-{P}&lt;em>{k} = \sum&lt;/em>{j=1}^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( G_{kj}cos(\theta_{k} - \theta_{j}) + B_{kj} sin(\theta_{k} - \theta_{j}) \right ) \label{eq:active_power}\
-{Q}&lt;em>{k} = \sum&lt;/em>{j=1}^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( G_{kj}sin(\theta_{k} - \theta_{j}) - B_{kj} cos(\theta_{k} - \theta_{j}) \right ) \label{eq:reactive_power}
-\end{align}&lt;/p>
-&lt;p>These equations are called the power flow equations, and they form the fundamental building block from which we solve the power flow problem.&lt;/p>
+$$
+I_{k} = \sum_{j=1}^{N} Y_{kj} V_{j}
+$$&lt;/p>
+&lt;p>Substitution yields:&lt;/p>
+&lt;div class="math">$$\begin{align}
+S_{k} &amp;= V_{k} \left ( \sum_{j=1}^{N} Y_{kj} V_{j} \right )^{*} \nonumber \\
+&amp;= V_{k} \sum_{j=1}^{N} Y_{kj}^{*} V_{j} ^{*} \nonumber
+\end{align}$$&lt;/div>&lt;p>We may define $G_{kj}$ and $B_{kj}$ as the real and imaginary parts of the admittance matrix element $Y_{kj}$ respectively, so that $Y_{kj} = G_{kj} + jB_{kj}$.
+Then we may rewrite the last equation:&lt;/p>
+&lt;div class="math">$$\begin{align}
+S_{k} &amp;= V_{k} \sum_{j=1}^{N} Y_{kj}^{*} V_{j}^{*} \nonumber \\
+&amp;= \vert V_{k} \vert \angle \theta_{k} \sum_{j=1}^{N} (G_{kj} + jB_{kj})^{*} ( \vert V_{j} \vert \angle \theta_{j})^{*} \nonumber \\
+&amp;= \vert V_{k} \vert \angle \theta_{k} \sum_{j=1}^{N} (G_{kj} - jB_{kj}) ( \vert V_{j} \vert \angle - \theta_{j}) \nonumber \\
+&amp;= \sum_{j=1} ^{N} \vert V_{k} \vert \angle \theta_{k} ( \vert V_{j} \vert \angle - \theta_{j}) (G_{kj} - jB_{kj}) \nonumber \\
+&amp;= \sum_{j=1} ^{N} \left ( \vert V_{k} \vert \vert V_{j} \vert \angle (\theta_{k} - \theta_{j}) \right ) (G_{kj} - jB_{kj}) \nonumber \\
+&amp;= \sum_{j=1} ^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( cos(\theta_{k} - \theta_{j}) + jsin(\theta_{k} - \theta_{j}) \right ) (G_{kj} - jB_{kj})
+\end{align}$$&lt;/div>&lt;p>If we now perform the algebraic multiplication of the two terms inside the parentheses, and collect real and imaginary parts, and recall that $S_{k} = P_{k} + jQ_{k}$, we can express (1) as two equations: one for the real part, $P_{k}$, and one for the imaginary part, $Q_{k}$, according to:&lt;/p>
+&lt;div class="math">$$\begin{align}
+{P}_{k} = \sum_{j=1}^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( G_{kj}cos(\theta_{k} - \theta_{j}) + B_{kj} sin(\theta_{k} - \theta_{j}) \right ) \\
+{Q}_{k} = \sum_{j=1}^{N} \vert V_{k} \vert \vert V_{j} \vert \left ( G_{kj}sin(\theta_{k} - \theta_{j}) - B_{kj} cos(\theta_{k} - \theta_{j}) \right )
+\end{align}$$&lt;/div>&lt;p>These equations are called the power flow equations, and they form the fundamental building block from which we solve the power flow problem.&lt;/p>
 &lt;p>We consider a power system network having $N$ buses. We assume one VD bus, $N_{PV}-1$ PV buses and $N-N_{PV}$ PQ buses.
 We assume that the VD bus is numbered bus $1$, the PV buses are numbered $2,&amp;hellip;,N_{PV}$, and the PQ buses are numbered $N_{PV}+1,&amp;hellip;,N$.
-We define the vector of unknown as the composite vector of unknown angles $\vec{\theta}$ and voltage magnitudes $\vert \vec{V} \vert$:
-\begin{align}
-\vec{x} = \left[ \begin{array}{c} \vec{\theta} \ \vert \vec{V} \vert \ \end{array} \right ]
-= \left[ \begin{array}{c} \theta_{2} \ \theta_{3} \ \vdots \ \theta_{N} \ \vert V_{N_{PV+1}} \vert \ \vert V_{N_{PV+2}} \vert \ \vdots \ \vert V_{N} \vert \end{array} \right]
-\end{align}&lt;/p>
-&lt;p>The right-hand sides of equations $\eqref{eq:active_power}$ and $\eqref{eq:reactive_power}$ depend on the elements of the unknown vector $\vec{x}$.
-Expressing this dependency more explicitly, we rewrite these equations as:
-\begin{align}
-P_{k} = P_{k} (\vec{x}) \Rightarrow P_{k}(\vec{x}) - P_{k} &amp;amp;= 0 \quad \quad k = 2,&amp;hellip;,N \
-Q_{k} = Q_{k} (\vec{x}) \Rightarrow Q_{k} (\vec{x}) - Q_{k} &amp;amp;= 0 \quad \quad k = N_{PV}+1,&amp;hellip;,N
-\end{align}&lt;/p>
-&lt;p>We now define the mismatch vector $\vec{f} (\vec{x})$ as:
-\begin{align*}
-\vec{f} (\vec{x}) = \left [ \begin{array}{c} f_{1}(\vec{x}) \ \vdots \ f_{N-1}(\vec{x}) \ &amp;mdash;&amp;mdash; \ f_{N}(\vec{x}) \ \vdots \ f_{2N-N_{PV} -1}(\vec{x}) \end{array} \right ]
-= \left [ \begin{array}{c} P_{2}(\vec{x}) - P_{2} \ \vdots \ P_{N}(\vec{x}) - P_{N} \ &amp;mdash;&amp;mdash;&amp;mdash; \ Q_{N_{PV}+1}(\vec{x}) - Q_{N_{PV}+1} \ \vdots \ Q_{N}(\vec{x}) - Q_{N} \end{array} \right]
-= \left [ \begin{array}{c} \Delta P_{2} \ \vdots \ \Delta P_{N} \ &amp;mdash;&amp;mdash; \ \Delta Q_{N_{PV}+1} \ \vdots \ \Delta Q_{N} \end{array} \right ]
+We define the vector of unknown as the composite vector of unknown angles $\vec{\theta}$ and voltage magnitudes $\vert \vec{V} \vert$:&lt;/p>
+&lt;div class="math">$$\begin{align}
+\vec{x} = \left[ \begin{array}{c} \vec{\theta} \\ \vert \vec{V} \vert \\ \end{array} \right ]
+= \left[ \begin{array}{c} \theta_{2} \\ \theta_{3} \\ \vdots \\ \theta_{N} \\ \vert V_{N_{PV+1}} \vert \\ \vert V_{N_{PV+2}} \vert \\ \vdots \\ \vert V_{N} \vert \end{array} \right]
+\end{align}$$&lt;/div>&lt;p>The right-hand sides of equations (2) and (3) depend on the elements of the unknown vector $\vec{x}$.
+Expressing this dependency more explicitly, we rewrite these equations as:&lt;/p>
+&lt;div class="math">$$\begin{align}
+P_{k} = P_{k} (\vec{x}) \Rightarrow P_{k}(\vec{x}) - P_{k} &amp;= 0 \quad \quad k = 2,...,N \\
+Q_{k} = Q_{k} (\vec{x}) \Rightarrow Q_{k} (\vec{x}) - Q_{k} &amp;= 0 \quad \quad k = N_{PV}+1,...,N
+\end{align}$$&lt;/div>&lt;p>We now define the mismatch vector $\vec{f} (\vec{x})$ as:&lt;/p>
+&lt;div class="math">$$\begin{align}
+\vec{f} (\vec{x}) = \left [ \begin{array}{c} f_{1}(\vec{x}) \\ \vdots \\ f_{N-1}(\vec{x}) \\ ------ \\ f_{N}(\vec{x}) \\ \vdots \\ f_{2N-N_{PV} -1}(\vec{x}) \end{array} \right ]
+= \left [ \begin{array}{c} P_{2}(\vec{x}) - P_{2} \\ \vdots \\ P_{N}(\vec{x}) - P_{N} \\ --------- \\ Q_{N_{PV}+1}(\vec{x}) - Q_{N_{PV}+1} \\ \vdots \\ Q_{N}(\vec{x}) - Q_{N} \end{array} \right]
+= \left [ \begin{array}{c} \Delta P_{2} \\ \vdots \\ \Delta P_{N} \\ ------ \\ \Delta Q_{N_{PV}+1} \\ \vdots \\ \Delta Q_{N} \end{array} \right ]
 = \vec{0}
-\end{align*}&lt;/p>
-&lt;p>That is a system of nonlinear equations.
+\end{align}$$&lt;/div>&lt;p>That is a system of nonlinear equations.
 This nonlinearity comes from the fact that $P_{k}$ and $Q_{k}$ have terms containing products of some of the unknowns and also terms containing trigonometric functions of some the unknowns.&lt;/p>
 &lt;h4 id="formulation-of-jacobian">Formulation of Jacobian&lt;/h4>
-&lt;p>As discussed in the previous section, the power flow problem will be solved using the Newton-Raphson method. Here, the Jacobian matrix is obtained by taking all first-order partial derivates of the power mismatch functions with respect to the voltage angles $\theta_{k}$ and magnitudes $\vert V_{k} \vert$ as:
-\begin{align}
-J_{jk}^{P \theta} &amp;amp;= \frac{\partial P_{j} (\vec{x} ) } {\partial \theta_{k}} = \vert V_{j} \vert \vert V_{k} \vert \left ( G_{jk} sin(\theta_{j} - \theta_{k}) - B_{jk} cos(\theta_{j} - \theta_{k} ) \right ) \
-J_{jj}^{P \theta} &amp;amp;= \frac{\partial P_{j}(\vec{x})}{\partial \theta_{j}} = -Q_{j} (\vec{x} ) - B_{jj} \vert V_{j} \vert ^{2} \
-J_{jk}^{Q \theta} &amp;amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \theta_{k}} = - \vert V_{j} \vert \vert V_{k} \vert \left ( G_{jk} cos(\theta_{j} - \theta_{k}) + B_{jk} sin(\theta_{j} - \theta_{k}) \right ) \
-J_{jj}^{Q \theta} &amp;amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \theta_{k}} = P_{j} (\vec{x} ) - G_{jj} \vert V_{j} \vert ^{2} \
-J_{jk}^{PV} &amp;amp;= \frac{\partial P_{j} (\vec{x} ) } {\partial \vert V_{k} \vert } = \vert V_{j} \vert \left ( G_{jk} cos(\theta_{j} - \theta_{k}) + B_{jk} sin(\theta_{j} - \theta_{k}) \right ) \
-J_{jj}^{PV} &amp;amp;= \frac{\partial P_{j}(\vec{x})}{\partial \vert V_{j} \vert } = \frac{P_{j} (\vec{x} )}{\vert V_{j} \vert} + G_{jj} \vert V_{j} \vert \
-J_{jk}^{QV} &amp;amp;= \frac{\partial Q_{j} (\vec{x} ) } {\partial \vert V_{k} \vert } = \vert V_{j} \vert \left ( G_{jk} sin(\theta_{j} - \theta_{k}) + B_{jk} cos(\theta_{j} - \theta_{k}) \right ) \
-J_{jj}^{QV} &amp;amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \vert V_{j} \vert } = \frac{Q_{j} (\vec{x} )}{\vert V_{j} \vert} - B_{jj} \vert V_{j} \vert \
-\end{align}&lt;/p>
-&lt;p>The linear system of equations that is solved in every Newton iteration can be written in matrix form as follows:
-\begin{align}
--\left [ \begin{array}{cccccc} \frac{\partial \Delta P_{2} }{\partial \theta_{2}} &amp;amp; \cdots &amp;amp; \frac{\partial \Delta P_{2} }{\partial \theta_{N}} &amp;amp;
-\frac{\partial \Delta P_{2} }{\partial \vert V_{N_{G+1}} \vert} &amp;amp; \cdots &amp;amp; \frac{\partial \Delta P_{2} }{\partial \vert V_{N} \vert} \
-\vdots &amp;amp; \ddots &amp;amp; \vdots &amp;amp; \vdots &amp;amp; \ddots &amp;amp; \vdots \
-\frac{\partial \Delta P_{N} }{\partial \theta_{2}} &amp;amp; \cdots &amp;amp; \frac{\partial \Delta P_{N}}{\partial \theta_{N}} &amp;amp;
-\frac{\partial \Delta P_{N}}{\partial \vert V_{N_{G+1}} \vert } &amp;amp; \cdots &amp;amp; \frac{\partial \Delta P_{N}}{\partial \vert V_{N} \vert} \
-\frac{\partial \Delta Q_{N_{G+1}} }{\partial \theta_{2}} &amp;amp; \cdots &amp;amp; \frac{\partial \Delta Q_{N_{G+1}} }{\partial \theta_{N}} &amp;amp;
-\frac{\partial \Delta Q_{N_{G+1}} }{\partial \vert V_{N_{G+1}} \vert } &amp;amp; \cdots &amp;amp; \frac{\partial \Delta Q_{N_{G+1}} }{\partial \vert V_{N} \vert} \
-\vdots &amp;amp; \ddots &amp;amp; \vdots &amp;amp; \vdots &amp;amp; \ddots &amp;amp; \vdots \
-\frac{\partial \Delta Q_{N}}{\partial \theta_{2}} &amp;amp; \cdots &amp;amp; \frac{\partial \Delta Q_{N}}{\partial \theta_{N}} &amp;amp;
-\frac{\partial \Delta Q_{N}}{\partial \vert V_{N_{G+1}} \vert } &amp;amp; \cdots &amp;amp; \frac{\partial \Delta Q_{N}}{\partial \vert V_{N} \vert}
+&lt;p>As discussed in the previous section, the power flow problem will be solved using the Newton-Raphson method. Here, the Jacobian matrix is obtained by taking all first-order partial derivates of the power mismatch functions with respect to the voltage angles $\theta_{k}$ and magnitudes $\vert V_{k} \vert$ as:&lt;/p>
+&lt;div class="math">$$\begin{align}
+J_{jk}^{P \theta} &amp;= \frac{\partial P_{j} (\vec{x} ) } {\partial \theta_{k}} = \vert V_{j} \vert \vert V_{k} \vert \left ( G_{jk} sin(\theta_{j} - \theta_{k}) - B_{jk} cos(\theta_{j} - \theta_{k} ) \right ) \\
+J_{jj}^{P \theta} &amp;= \frac{\partial P_{j}(\vec{x})}{\partial \theta_{j}} = -Q_{j} (\vec{x} ) - B_{jj} \vert V_{j} \vert ^{2} \\
+J_{jk}^{Q \theta} &amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \theta_{k}} = - \vert V_{j} \vert \vert V_{k} \vert \left ( G_{jk} cos(\theta_{j} - \theta_{k}) + B_{jk} sin(\theta_{j} - \theta_{k}) \right ) \\
+J_{jj}^{Q \theta} &amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \theta_{k}} = P_{j} (\vec{x} ) - G_{jj} \vert V_{j} \vert ^{2} \\
+J_{jk}^{PV} &amp;= \frac{\partial P_{j} (\vec{x} ) } {\partial \vert V_{k} \vert } = \vert V_{j} \vert \left ( G_{jk} cos(\theta_{j} - \theta_{k}) + B_{jk} sin(\theta_{j} - \theta_{k}) \right ) \\
+J_{jj}^{PV} &amp;= \frac{\partial P_{j}(\vec{x})}{\partial \vert V_{j} \vert } = \frac{P_{j} (\vec{x} )}{\vert V_{j} \vert} + G_{jj} \vert V_{j} \vert \\
+J_{jk}^{QV} &amp;= \frac{\partial Q_{j} (\vec{x} ) } {\partial \vert V_{k} \vert } = \vert V_{j} \vert \left ( G_{jk} sin(\theta_{j} - \theta_{k}) + B_{jk} cos(\theta_{j} - \theta_{k}) \right ) \\
+J_{jj}^{QV} &amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \vert V_{j} \vert } = \frac{Q_{j} (\vec{x} )}{\vert V_{j} \vert} - B_{jj} \vert V_{j} \vert \\
+\end{align}$$&lt;/div>&lt;p>The linear system of equations that is solved in every Newton iteration can be written in matrix form as follows:&lt;/p>
+&lt;div class="math">$$\begin{align}
+-\left [ \begin{array}{cccccc}
+\frac{\partial \Delta P_{2} }{\partial \theta_{2}} &amp; \cdots &amp; \frac{\partial \Delta P_{2} }{\partial \theta_{N}} &amp;
+\frac{\partial \Delta P_{2} }{\partial \vert V_{N_{G+1}} \vert} &amp; \cdots &amp; \frac{\partial \Delta P_{2} }{\partial \vert V_{N} \vert} \\
+\vdots &amp; \ddots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+\frac{\partial \Delta P_{N} }{\partial \theta_{2}} &amp; \cdots &amp; \frac{\partial \Delta P_{N}}{\partial \theta_{N}} &amp;
+\frac{\partial \Delta P_{N}}{\partial \vert V_{N_{G+1}} \vert } &amp; \cdots &amp; \frac{\partial \Delta P_{N}}{\partial \vert V_{N} \vert} \\
+\frac{\partial \Delta Q_{N_{G+1}} }{\partial \theta_{2}} &amp; \cdots &amp; \frac{\partial \Delta Q_{N_{G+1}} }{\partial \theta_{N}} &amp;
+\frac{\partial \Delta Q_{N_{G+1}} }{\partial \vert V_{N_{G+1}} \vert } &amp; \cdots &amp; \frac{\partial \Delta Q_{N_{G+1}} }{\partial \vert V_{N} \vert} \\
+\vdots &amp; \ddots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+\frac{\partial \Delta Q_{N}}{\partial \theta_{2}} &amp; \cdots &amp; \frac{\partial \Delta Q_{N}}{\partial \theta_{N}} &amp;
+\frac{\partial \Delta Q_{N}}{\partial \vert V_{N_{G+1}} \vert } &amp; \cdots &amp; \frac{\partial \Delta Q_{N}}{\partial \vert V_{N} \vert}
 \end{array} \right ]
-\left [ \begin{array}{c} \Delta \theta_{2} \ \vdots \ \Delta \theta_{N} \ \Delta \vert V_{N_{G+1}} \vert \ \vdots \ \Delta \vert V_{N} \vert \end{array} \right ]
-= \left [ \begin{array}{c} \Delta P_{2} \ \vdots \ \Delta P_{N} \ \Delta Q_{N_{G+1}} \ \vdots \ \Delta Q_{N} \end{array} \right ]
-\end{align}&lt;/p>
-&lt;h2 id="solution-of-the-problem">Solution of the Problem&lt;/h2>
-&lt;p>The solution update formula is given by:
-\begin{align}
+\left [ \begin{array}{c} \Delta \theta_{2} \\ \vdots \\ \Delta \theta_{N} \\ \Delta \vert V_{N_{G+1}} \vert \\ \vdots \\ \Delta \vert V_{N} \vert \end{array} \right ]
+= \left [ \begin{array}{c} \Delta P_{2} \\ \vdots \\ \Delta P_{N} \\ \Delta Q_{N_{G+1}} \\ \vdots \\ \Delta Q_{N} \end{array} \right ]
+\end{align}$$&lt;/div>&lt;h2 id="solution-of-the-problem">Solution of the Problem&lt;/h2>
+&lt;p>The solution update formula is given by:&lt;/p>
+&lt;div class="math">$$\begin{align}
 \vec{x}^{(i+1)} = \vec{x}^{(i)} + \Delta \vec{x}^{(i)} = \vec{x}^{(i)} - \textbf{J}^{-1} \vec{f} (\vec{x}^{(i)})
-\end{align}&lt;/p>
-&lt;p>To sum up, the NR algorithm, for application to the power flow problem is:&lt;/p>
+\end{align}$$&lt;/div>&lt;p>To sum up, the NR algorithm, for application to the power flow problem is:&lt;/p>
 &lt;ol>
 &lt;li>Set the iteration counter to $i=1$. Use the initial solution $V_{i} = 1 \angle 0^{\circ}$&lt;/li>
 &lt;li>Compute the mismatch vector $\vec{f}({\vec{x}})$ using the power flow equations&lt;/li>
@@ -464,7 +857,7 @@ J_{jj}^{QV} &amp;amp;= \frac{\partial Q_{j}(\vec{x})}{\partial \vert V_{j} \vert
 $$
 v_j(t) - v_k(t) = v_L(t) = L \frac{\mathrm{d} i_L(t)}{\mathrm{d}t}
 $$
-Integration results in an equation to compute the current at time $t$ from a previous state at $t - \Delta t$ \eqref{eq:inductance_integrated}.
+Integration results in an equation to compute the current at time $t$ from a previous state at $t - \Delta t$.
 $$
 i_L(t) = i_L(t - \Delta t) + \frac{1}{L} \ \int_{t - \Delta t}^{t} v_L(\tau) \ \mathrm{d} \tau
 $$
@@ -477,7 +870,7 @@ Applying the trapezoidal rule to leads to
 $$
 i_L(t) = i_L(t - \Delta t) + \frac{\Delta t}{2L}(v_L(t) + v_L(t - \Delta t))
 $$
-This can be rewritten in terms of an equivalent conductance \eqref{eq:ind_rc_equiv_r} and current source \eqref{eq:ind_rc_equiv_i} and the number of time steps $k$ with size $\Delta t$.
+This can be rewritten in terms of an equivalent conductance and current source and the number of time steps $k$ with size $\Delta t$.
 $$
 i_L(k) = g_L v_L(k) + i_{L,equiv}(k-1)
 $$
@@ -490,7 +883,7 @@ $$&lt;/p>
 &lt;p>Hence, components described by differential equations are transformed into a DC equivalent circuit as depicted in the figure below.&lt;/p>
 &lt;p>&lt;img src="electrical_resistive_companion_inductance.svg" alt="inductance resistive companion">&lt;/p>
 &lt;h3 id="capacitance">Capacitance&lt;/h3>
-&lt;p>The same procedure can be applied to \eqref{eq:capacitance} describing a capacitance.
+&lt;p>The same procedure can be applied to a capacitance.
 Integration on both side yields
 $$
 i_C(t) = C \frac{\mathrm{d}}{\mathrm{d}t} \ v_C(t)
@@ -521,14 +914,11 @@ As long as the system topology and the time step is fixed, the system matrix is 
 The overall procedure does not change but the system equations are rewritten using complex numbers and all variables need to be expressed in terms of dynamic phasors.
 Therefore, the resistive companion representations of inductances and capacitances have to be adapted as well.&lt;/p>
 &lt;h3 id="inductance-1">Inductance&lt;/h3>
-&lt;p>In dynamic phasors the integration of the inductance equation yields
-$$
-\begin{align*}
-\langle v_L \rangle(t) &amp;amp;= \Big \langle L \frac{\mathrm{d} i_L}{\mathrm{d}t} \Big \rangle(t) \
-&amp;amp;= L \frac{\mathrm{d}}{dt} \langle i_L \rangle(t) + j \omega L \ \langle i_L \rangle(t)
-\end{align*}
-$$
-$$
+&lt;p>In dynamic phasors the integration of the inductance equation yields&lt;/p>
+&lt;div class="math">$$\begin{align}
+\langle v_L \rangle(t) &amp;= \Big \langle L \frac{\mathrm{d} i_L}{\mathrm{d}t} \Big \rangle(t) \nonumber \\
+&amp;= L \frac{\mathrm{d}}{dt} \langle i_L \rangle(t) + j \omega L \ \langle i_L \rangle(t)
+\end{align}$$&lt;/div>&lt;p>$$
 \langle i_L \rangle(t) = \langle i_L \rangle(t - \Delta t) + \int_{t - \Delta t}^t \frac{1}{L} \langle v_L \rangle(\tau) - j \omega \ \langle i_L \rangle(\tau) \mathrm{d} \tau
 $$&lt;/p>
 &lt;p>Applying the trapezoidal method leads to the finite difference equation:
@@ -557,17 +947,12 @@ $$
 $$
 v_C(t) = v_C(t- \Delta t) + \int_{t- \Delta t}^{t} \frac{1}{C} \ i_C(\tau) -j \omega \ v_C(\tau) \ \mathrm{d} \tau
 $$&lt;/p>
-&lt;p>Applying the trapezoidal rule for the capacitance equation leads to the finite difference equation:
-$$
-\begin{split}
-\langle v_C \rangle(k) = \langle v_C \rangle(k-1)&lt;/p>
-&lt;ul>
-&lt;li>\frac{\Delta t}{2} \bigg[ \frac{1}{C} \ \langle i_C \rangle(k) - j \omega \ \langle v_C \rangle(k) \&lt;/li>
-&lt;li>\frac{1}{C} \ \langle i_C \rangle(k-1) - j \omega \ \langle v_C \rangle(k-1) \bigg]
-\end{split}
-$$&lt;/li>
-&lt;/ul>
-&lt;p>The \ac{DP} model for the capacitance is defined by
+&lt;p>Applying the trapezoidal rule for the capacitance equation leads to the finite difference equation:&lt;/p>
+&lt;div class="math">$$\begin{split}
+\langle v_C \rangle(k) = \langle v_C \rangle(k-1)
++ \frac{\Delta t}{2} \bigg[ \frac{1}{C} \ \langle i_C \rangle(k) - j \omega \ \langle v_C \rangle(k) \\
++ \frac{1}{C} \ \langle i_C \rangle(k-1) - j \omega \ \langle v_C \rangle(k-1) \bigg]
+\end{split}$$&lt;/div>&lt;p>The DP model for the capacitance is defined by
 $$
 \langle i_C \rangle(k) = \frac{1+jb}{a} \ \langle v_C \rangle(k) + \langle i_{C,equiv} \rangle(k-1)
 $$
@@ -605,8 +990,6 @@ $$
 $$
 \langle i_{equiv} \rangle(k-1) = \frac{1 - b^2 - j2b + 2Ra + (Ra)^2 - j2Rab}{(1+Ra^2) + b^2} \langle i \rangle(k-1) + \frac{a + Ra^2 - jab}{(1+Ra)^2 + b^2} \langle v \rangle(k-1)
 $$&lt;/p></description></item><item><title>Docs: Synchronous Generator</title><link>https://sogno-platform.github.io/dpsim/docs/models/synchronous-generator/</link><pubDate>Wed, 18 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/models/synchronous-generator/</guid><description>
-&lt;script src="https://polyfill.io/v3/polyfill.min.js?features=es6">&lt;/script>
-&lt;script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">&lt;/script>
 &lt;p>Two different synchronous machine models are currently available:&lt;/p>
 &lt;ul>
 &lt;li>the full order dq0 reference frame model (EMT, DP) [Kundur, Power system stability and control, 1994]&lt;/li>
@@ -615,75 +998,71 @@ $$&lt;/p></description></item><item><title>Docs: Synchronous Generator</title><l
 &lt;p>The machine model is interfaced to the nodal analysis network solver through a current source, which only affects the source vector and not the system matrix &lt;a href="https://ieeexplore.ieee.org/document/5411963">Wang2010&lt;/a>.&lt;/p>
 &lt;h2 id="basic-equations">Basic Equations&lt;/h2>
 &lt;p>The equations of the stator and rotor voltages are&lt;/p>
-&lt;p>\begin{align}
-\mathbf{v}&lt;em>{abcs} &amp;amp;= \mathbf{R}&lt;em>s \mathbf{i}&lt;/em>{abcs} + \frac{d}{dt} \boldsymbol{\lambda}&lt;/em>{abcs} \
-\mathbf{v}&lt;em>{dqr} &amp;amp;= \mathbf{R}&lt;em>r \mathbf{i}&lt;/em>{dqr} + \frac{d}{dt} \boldsymbol{\lambda}&lt;/em>{dqr}
-\end{align}&lt;/p>
-&lt;p>where&lt;/p>
-&lt;p>\begin{align}
-\mathbf{v}&lt;em>{abcs} &amp;amp;=
+&lt;div class="math">$$\begin{align}
+\mathbf{v}_{abcs} &amp;= \mathbf{R}_s \mathbf{i}_{abcs} + \frac{d}{dt} \boldsymbol{\lambda}_{abcs} \\
+\mathbf{v}_{dqr} &amp;= \mathbf{R}_r \mathbf{i}_{dqr} + \frac{d}{dt} \boldsymbol{\lambda}_{dqr}
+\end{align}$$&lt;/div>&lt;p>where&lt;/p>
+&lt;div class="math">$$\begin{align}
+\mathbf{v}_{abcs} &amp;=
 \begin{pmatrix}
-v&lt;/em>{as} &amp;amp; v_{bs} &amp;amp; v_{cs}
-\end{pmatrix}^T \
+v_{as} &amp; v_{bs} &amp; v_{cs}
+\end{pmatrix}^T \\
 %
-\mathbf{v}&lt;em>{dqr} &amp;amp;=
+\mathbf{v}_{dqr} &amp;=
 \begin{pmatrix}
-v&lt;/em>{fd} &amp;amp; v_{kd} &amp;amp; v_{kq1} &amp;amp; v_{kq2}
-\end{pmatrix}^T \
+v_{fd} &amp; v_{kd} &amp; v_{kq1} &amp; v_{kq2}
+\end{pmatrix}^T \\
 %
-\mathbf{i}&lt;em>{abcs} &amp;amp;=
+\mathbf{i}_{abcs} &amp;=
 \begin{pmatrix}
-i&lt;/em>{as} &amp;amp; i_{bs} &amp;amp; i_{cs}
-\end{pmatrix}^T \
+i_{as} &amp; i_{bs} &amp; i_{cs}
+\end{pmatrix}^T \\
 %
-\mathbf{i}&lt;em>{dqr} &amp;amp;=
+\mathbf{i}_{dqr} &amp;=
 \begin{pmatrix}
-i&lt;/em>{fd} &amp;amp; i_{kd} &amp;amp; i_{kq1} &amp;amp; i_{kq2}
-\end{pmatrix}^T \
+i_{fd} &amp; i_{kd} &amp; i_{kq1} &amp; i_{kq2}
+\end{pmatrix}^T \\
 %
-\boldsymbol{\lambda}&lt;em>{abcs} &amp;amp;=
+\boldsymbol{\lambda}_{abcs} &amp;=
 \begin{pmatrix}
-\lambda&lt;/em>{as} &amp;amp; \lambda_{bs} &amp;amp; \lambda_{cs}
-\end{pmatrix}^T \
+\lambda_{as} &amp; \lambda_{bs} &amp; \lambda_{cs}
+\end{pmatrix}^T \\
 %
-\boldsymbol{\lambda}&lt;em>{dqr} &amp;amp;=
+\boldsymbol{\lambda}_{dqr} &amp;=
 \begin{pmatrix}
-\lambda&lt;/em>{fd} &amp;amp; \lambda_{kd} &amp;amp; \lambda_{kq1} &amp;amp; \lambda_{kq2}
-\end{pmatrix}^T \
+\lambda_{fd} &amp; \lambda_{kd} &amp; \lambda_{kq1} &amp; \lambda_{kq2}
+\end{pmatrix}^T \\
 %
-\mathbf{R}&lt;em>s &amp;amp;= diag
+\mathbf{R}_s &amp;= diag
 \begin{bmatrix}
-R_s &amp;amp; R_s &amp;amp; R_s
-\end{bmatrix} \
+R_s &amp; R_s &amp; R_s
+\end{bmatrix} \\
 %
-\mathbf{R}&lt;em>r &amp;amp;= diag
+\mathbf{R}_r &amp;= diag
 \begin{bmatrix}
-R&lt;/em>{fd} &amp;amp; R&lt;/em>{kd} &amp;amp; R_{kq1} &amp;amp; R_{kq2}
+R_{fd} &amp; R_{kd} &amp; R_{kq1} &amp; R_{kq2}
 \end{bmatrix}
-\end{align}&lt;/p>
-&lt;p>The flux linkage equations are defined as&lt;/p>
-&lt;p>\begin{equation}
+\end{align}$$&lt;/div>&lt;p>The flux linkage equations are defined as&lt;/p>
+&lt;div class="math">$$\begin{equation}
 \begin{bmatrix}
-\boldsymbol{\lambda}&lt;em>{abcs} \
-\boldsymbol{\lambda}&lt;/em>{dqr}
+\boldsymbol{\lambda}_{abcs} \\
+\boldsymbol{\lambda}_{dqr}
 \end{bmatrix}
 =
 \begin{bmatrix}
-\mathbf{L}&lt;em>s &amp;amp; \mathbf{L}&lt;/em>{rs} \
-{(\mathbf{L}&lt;em>{rs})}^{T} &amp;amp; \mathbf{L}&lt;em>r
+\mathbf{L}_s &amp; \mathbf{L}_{rs} \\
+{(\mathbf{L}_{rs})}^{T} &amp; \mathbf{L}_r
 \end{bmatrix}
 \begin{bmatrix}
-\mathbf{i}&lt;/em>{abcs} \
-\mathbf{i}&lt;/em>{dqr}
+\mathbf{i}_{abcs} \\
+\mathbf{i}_{dqr}
 \end{bmatrix}
-\end{equation}&lt;/p>
-&lt;p>The inductance matrices are varying with the rotor position $\theta_r$ which varies with time.&lt;/p>
+\end{equation}$$&lt;/div>&lt;p>The inductance matrices are varying with the rotor position $\theta_r$ which varies with time.&lt;/p>
 &lt;p>The mechanical equations are:&lt;/p>
-&lt;p>\begin{align}
-\frac{d\theta_r}{dt} &amp;amp;= \omega_r \
-\frac{d\omega_r}{dt} &amp;amp;= \frac{P}{2J} (T_e-T_m)
-\end{align}&lt;/p>
-&lt;p>$\theta_r$ is the rotor position, $\omega_r$ is the angular electrical speed, $P$ is the number of poles, $J$ is the moment of inertia, $T_m$ and $T_e$ are the mechanical and electrical torque, respectively.
+&lt;div class="math">$$\begin{align}
+\frac{d\theta_r}{dt} &amp;= \omega_r \\
+\frac{d\omega_r}{dt} &amp;= \frac{P}{2J} (T_e-T_m)
+\end{align}$$&lt;/div>&lt;p>$\theta_r$ is the rotor position, $\omega_r$ is the angular electrical speed, $P$ is the number of poles, $J$ is the moment of inertia, $T_m$ and $T_e$ are the mechanical and electrical torque, respectively.
 Motor convention is used for all models.&lt;/p>
 &lt;h2 id="dq0-reference-frame-9th-order-model">dq0 Reference Frame 9th Order Model&lt;/h2>
 &lt;p>For stator referred variables, the base quantities for per unit are chosen as follows:&lt;/p>
@@ -693,318 +1072,177 @@ Motor convention is used for all models.&lt;/p>
 &lt;li>$f_{base}$ rated frequency in Hz&lt;/li>
 &lt;/ul>
 &lt;p>The synchronous generator equations in terms of per unit values in the rotor reference frame become:&lt;/p>
-&lt;h1 id="endbmatrix">\begin{equation}
+&lt;div class="math">$$\begin{equation}
 \begin{bmatrix}
-\mathbf{v}&lt;em>{dq0s} \
-\mathbf{v}&lt;/em>{dqr}
-\end{bmatrix}&lt;/h1>
-&lt;p>\mathbf{R}&lt;em>{sr}
+\mathbf{v}_{dq0s} \\
+\mathbf{v}_{dqr}
+\end{bmatrix}
+=
+\mathbf{R}_{sr}
 \begin{bmatrix}
-\mathbf{i}&lt;/em>{dq0s} \
-\mathbf{i}&lt;em>{dqr}
+\mathbf{i}_{dq0s} \\
+\mathbf{i}_{dqr}
 \end{bmatrix}
 +
 \frac{d}{dt}
 \begin{bmatrix}
-\boldsymbol{\lambda}&lt;/em>{dq0s} \
+\boldsymbol{\lambda}_{dq0s} \\
 \boldsymbol{\lambda}_{dqr}
-\end{bmatrix}&lt;/p>
-&lt;ul>
-&lt;li>\omega_r
+\end{bmatrix}
++ \omega_r
 \begin{bmatrix}
-\boldsymbol{\lambda}_{qds} \
+\boldsymbol{\lambda}_{qds} \\
 0
 \end{bmatrix}
-\label{eq:rotor_reference}
-\end{equation}&lt;/li>
-&lt;/ul>
-&lt;p>where&lt;/p>
-&lt;p>\begin{align}
-\mathbf{v}&lt;em>{dq0s} &amp;amp;=
+\end{equation}$$&lt;/div>&lt;p>where&lt;/p>
+&lt;div class="math">$$\begin{align}
+\mathbf{v}_{dq0s} &amp;=
 \begin{pmatrix}
-v&lt;/em>{ds} &amp;amp; v_{qs} &amp;amp; v_{0s}
-\end{pmatrix}^T \nonumber \
+v_{ds} &amp; v_{qs} &amp; v_{0s}
+\end{pmatrix}^T \nonumber \\
 %
-\mathbf{i}&lt;em>{dq0s} &amp;amp;=
+\mathbf{i}_{dq0s} &amp;=
 \begin{pmatrix}
-i&lt;/em>{ds} &amp;amp; i_{qs} &amp;amp; i_{0s}
-\end{pmatrix}^T \nonumber \
+i_{ds} &amp; i_{qs} &amp; i_{0s}
+\end{pmatrix}^T \nonumber \\
 %
-\boldsymbol{\lambda}&lt;em>{dq0s} &amp;amp;=
+\boldsymbol{\lambda}_{dq0s} &amp;=
 \begin{pmatrix}
-\lambda&lt;/em>{ds} &amp;amp; \lambda_{qs} &amp;amp; \lambda_{0s}
-\end{pmatrix}^T \nonumber \
+\lambda_{ds} &amp; \lambda_{qs} &amp; \lambda_{0s}
+\end{pmatrix}^T \nonumber \\
 %
-\mathbf{R}&lt;em>{sr} &amp;amp;= diag
+\mathbf{R}_{sr} &amp;= diag
 \begin{bmatrix}
-R_s &amp;amp; R_s &amp;amp; R_s &amp;amp; R&lt;/em>{fd} &amp;amp; R_{kd} &amp;amp; R_{kq1} &amp;amp; R_{kq2}
-\end{bmatrix} \nonumber \
+R_s &amp; R_s &amp; R_s &amp; R_{fd} &amp; R_{kd} &amp; R_{kq1} &amp; R_{kq2}
+\end{bmatrix} \nonumber \\
 %
-\boldsymbol{\lambda}&lt;em>{dqs} &amp;amp;=
+\boldsymbol{\lambda}_{dqs} &amp;=
 \begin{pmatrix}
--\lambda&lt;/em>{qs} &amp;amp; \lambda_{ds} &amp;amp; 0
+-\lambda_{qs} &amp; \lambda_{ds} &amp; 0
 \end{pmatrix}^T.
-\end{align}&lt;/p>
-&lt;p>The flux linkages are:&lt;/p>
-&lt;h1 id="endpmatrix">\begin{equation}
+\end{align}$$&lt;/div>&lt;p>The flux linkages are:&lt;/p>
+&lt;div class="math">$$\begin{equation}
 \begin{pmatrix}
-\boldsymbol{\lambda}&lt;em>{dq0s} \
-\boldsymbol{\lambda}&lt;/em>{dqr}
-\end{pmatrix}&lt;/h1>
-&lt;p>\begin{bmatrix}
-\mathbf{L}&lt;em>{dqss} &amp;amp; \mathbf{L}&lt;/em>{dqsr} \
-\mathbf{L}&lt;em>{dqrs} &amp;amp; \mathbf{L}&lt;/em>{dqrr}
+\boldsymbol{\lambda}_{dq0s} \\
+\boldsymbol{\lambda}_{dqr}
+\end{pmatrix}
+=
+\begin{bmatrix}
+\mathbf{L}_{dqss} &amp; \mathbf{L}_{dqsr} \\
+\mathbf{L}_{dqrs} &amp; \mathbf{L}_{dqrr}
 \end{bmatrix}
 \begin{pmatrix}
-\mathbf{i}&lt;em>{dq0s} \
-\mathbf{i}&lt;/em>{dqr}
+\mathbf{i}_{dq0s} \\
+\mathbf{i}_{dqr}
 \end{pmatrix}
-\label{eq:flux_linkages}
-\end{equation}&lt;/p>
-&lt;p>where&lt;/p>
-&lt;p>\begin{align}
-\mathbf{L}&lt;em>{dqss} &amp;amp;=
+\end{equation}$$&lt;/div>&lt;p>where&lt;/p>
+&lt;div class="math">$$\begin{align}
+\mathbf{L}_{dqss} &amp;=
 \begin{bmatrix}
-L&lt;/em>{d} &amp;amp; 0 &amp;amp; 0 \
-0 &amp;amp; L_{q} &amp;amp; 0 \
-0 &amp;amp; 0 &amp;amp; L_{ls}
-\end{bmatrix} \nonumber \&lt;/p>
-&lt;p>\mathbf{L}&lt;em>{dqsr} &amp;amp;=
+L_{d} &amp; 0 &amp; 0 \\
+0 &amp; L_{q} &amp; 0 \\
+0 &amp; 0 &amp; L_{ls}
+\end{bmatrix} \nonumber \\
+\mathbf{L}_{dqsr} &amp;=
 \begin{bmatrix}
-L&lt;/em>{md} &amp;amp; L_{md} &amp;amp; 0 &amp;amp; 0 \
-0 &amp;amp; 0 &amp;amp; L_{mq} &amp;amp; L_{mq} \
-0 &amp;amp; 0 &amp;amp; 0 &amp;amp; 0
-\end{bmatrix} \nonumber \&lt;/p>
-&lt;p>\mathbf{L}&lt;em>{dqrs} &amp;amp;=
+L_{md} &amp; L_{md} &amp; 0 &amp; 0 \\
+0 &amp; 0 &amp; L_{mq} &amp; L_{mq} \\
+0 &amp; 0 &amp; 0 &amp; 0
+\end{bmatrix} \nonumber \\
+\mathbf{L}_{dqrs} &amp;=
 \begin{bmatrix}
-L&lt;/em>{md} &amp;amp; 0 &amp;amp; 0 \
-L_{md} &amp;amp; 0 &amp;amp; 0 \
-0 &amp;amp; L_{mq} &amp;amp; 0 \
-0 &amp;amp; L_{mq} &amp;amp; 0
-\end{bmatrix} \nonumber \&lt;/p>
-&lt;p>\mathbf{L}&lt;em>{rr} &amp;amp;=
+L_{md} &amp; 0 &amp; 0 \\
+L_{md} &amp; 0 &amp; 0 \\
+0 &amp; L_{mq} &amp; 0 \\
+0 &amp; L_{mq} &amp; 0
+\end{bmatrix} \nonumber \\
+\mathbf{L}_{rr} &amp;=
 \begin{bmatrix}
-L&lt;/em>{fd} &amp;amp; L_{md} &amp;amp; 0 &amp;amp; 0 \
-L_{md} &amp;amp; L_{kd} &amp;amp; 0 &amp;amp; 0 \
-0 &amp;amp; 0 &amp;amp; L_{kq1} &amp;amp; L_{mq} \
-0 &amp;amp; 0 &amp;amp; L_{mq} &amp;amp; L_{kq2}
-\end{bmatrix} \nonumber \&lt;/p>
-&lt;p>\end{align}&lt;/p>
-&lt;p>with&lt;/p>
-&lt;p>\begin{align}
-L_{d} &amp;amp;= L_{ls} + L_{md} \nonumber \
-L_{q} &amp;amp;= L_{ls} + L_{mq} \nonumber \
-L_{fd} &amp;amp;= L_{lfd} + L_{md} \nonumber \
-L_{kd} &amp;amp;= L_{lkd} + L_{md} \nonumber \
-L_{kq1} &amp;amp;= L_{lkq1} + L_{mq} \nonumber \
-L_{kq2} &amp;amp;= L_{lkq2} + L_{mq}.
-\end{align}&lt;/p>
-&lt;p>The mechanical equations in per unit become:&lt;/p>
-&lt;p>\begin{align}
-T_e &amp;amp;= \lambda_{qs} i_{ds} - \lambda_{ds} i_{qs} \
-\frac{d \omega_r}{dt} &amp;amp;= \omega_r \
-\frac{1}{\omega_b} \frac{d \omega_r}{dt} &amp;amp;= \frac{1}{2H} (T_m - T_e).
-\end{align}&lt;/p>
-&lt;p>For the simulation, fluxes are chosen as state variables.
+L_{fd} &amp; L_{md} &amp; 0 &amp; 0 \\
+L_{md} &amp; L_{kd} &amp; 0 &amp; 0 \\
+0 &amp; 0 &amp; L_{kq1} &amp; L_{mq} \\
+0 &amp; 0 &amp; L_{mq} &amp; L_{kq2}
+\end{bmatrix} \nonumber \\
+\end{align}$$&lt;/div>&lt;p>with&lt;/p>
+&lt;div class="math">$$\begin{align}
+L_{d} &amp;= L_{ls} + L_{md} \nonumber \\
+L_{q} &amp;= L_{ls} + L_{mq} \nonumber \\
+L_{fd} &amp;= L_{lfd} + L_{md} \nonumber \\
+L_{kd} &amp;= L_{lkd} + L_{md} \nonumber \\
+L_{kq1} &amp;= L_{lkq1} + L_{mq} \nonumber \\
+L_{kq2} &amp;= L_{lkq2} + L_{mq}.
+\end{align}$$&lt;/div>&lt;p>The mechanical equations in per unit become:&lt;/p>
+&lt;div class="math">$$\begin{align}
+T_e &amp;= \lambda_{qs} i_{ds} - \lambda_{ds} i_{qs} \\
+\frac{d \omega_r}{dt} &amp;= \omega_r \\
+\frac{1}{\omega_b} \frac{d \omega_r}{dt} &amp;= \frac{1}{2H} (T_m - T_e).
+\end{align}$$&lt;/div>&lt;p>For the simulation, fluxes are chosen as state variables.
 To avoid the calculation of currents from fluxes using the inverse of the inductance matrix, the equation set needs to be solved for the fluxes analytically.
 To simplify the calculations, dq axis magnetizing flux linkages are defined [Krause, Analysis of electric machinery and drive systems, 2002]:&lt;/p>
-&lt;p>\begin{align}
-\lambda_{md} &amp;amp;= L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \
-\lambda_{mq} &amp;amp;= L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right).
-\label{eq:magnetizing_flux_linkage}
-\end{align}&lt;/p>
-&lt;p>Using the flux linkages results in a simpler equation set for the fluxes:&lt;/p>
-&lt;p>\begin{align}
-\lambda_{ds} &amp;amp;= L_{ls} i_{ds} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \
-\lambda_{qs} &amp;amp;= L_{ls} i_{qs} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right) \nonumber \
-\lambda_{0s} &amp;amp;= L_{ls} i_{0s} \nonumber \
-\lambda_{fd} &amp;amp;= L_{ls} i_{fd} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \
-\lambda_{kd} &amp;amp;= L_{ls} i_{kd} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \
-\lambda_{kq1} &amp;amp;= L_{ls} i_{kq1} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right) \nonumber \
-\lambda_{kq2} &amp;amp;= L_{ls} i_{kq2} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right)
-\label{eq:syngen_lambda}
-\end{align}&lt;/p>
-&lt;p>\begin{align}
-\lambda_{ds} &amp;amp;= L_{ls} i_{ds} + \lambda_{md} \nonumber \
-\lambda_{qs} &amp;amp;= L_{ls} i_{qs} + \lambda_{mq} \nonumber \
-\lambda_{0s} &amp;amp;= L_{ls} i_{0s} \nonumber \
-\lambda_{fd} &amp;amp;= L_{lfd} i_{fd} + \lambda_{md} \nonumber \
-\lambda_{kd} &amp;amp;= L_{lkd} i_{kd} + \lambda_{md} \nonumber \
-\lambda_{kq1} &amp;amp;= L_{lkq1} i_{kq1} + \lambda_{mq} \nonumber \
-\lambda_{kq2} &amp;amp;= L_{lkq2} i_{kq2} + \lambda_{mq}
-\label{eq:flux_currents_flux_linkage}
-\end{align}&lt;/p>
-&lt;h3 id="dynamic-phasor-model">Dynamic Phasor Model&lt;/h3>
+&lt;div class="math">$$\begin{align}
+\lambda_{md} &amp;= L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \\
+\lambda_{mq} &amp;= L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right)
+\end{align}$$&lt;/div>&lt;p>Using the flux linkages results in a simpler equation set for the fluxes:&lt;/p>
+&lt;div class="math">$$\begin{align}
+\lambda_{ds} &amp;= L_{ls} i_{ds} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \\
+\lambda_{qs} &amp;= L_{ls} i_{qs} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right) \nonumber \\
+\lambda_{0s} &amp;= L_{ls} i_{0s} \nonumber \\
+\lambda_{fd} &amp;= L_{ls} i_{fd} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \\
+\lambda_{kd} &amp;= L_{ls} i_{kd} + L_{md} \left( i_{ds} + i_{fd} + i_{kd} \right) \nonumber \\
+\lambda_{kq1} &amp;= L_{ls} i_{kq1} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right) \nonumber \\
+\lambda_{kq2} &amp;= L_{ls} i_{kq2} + L_{mq} \left( i_{qs} + i_{kq1} + i_{kq2} \right)
+\end{align}$$&lt;/div>
+&lt;div class="math">$$\begin{align}
+\lambda_{ds} &amp;= L_{ls} i_{ds} + \lambda_{md} \nonumber \\
+\lambda_{qs} &amp;= L_{ls} i_{qs} + \lambda_{mq} \nonumber \\
+\lambda_{0s} &amp;= L_{ls} i_{0s} \nonumber \\
+\lambda_{fd} &amp;= L_{lfd} i_{fd} + \lambda_{md} \nonumber \\
+\lambda_{kd} &amp;= L_{lkd} i_{kd} + \lambda_{md} \nonumber \\
+\lambda_{kq1} &amp;= L_{lkq1} i_{kq1} + \lambda_{mq} \nonumber \\
+\lambda_{kq2} &amp;= L_{lkq2} i_{kq2} + \lambda_{mq}
+\end{align}$$&lt;/div>&lt;h3 id="dynamic-phasor-model">Dynamic Phasor Model&lt;/h3>
 &lt;p>The fundamental dynamic phasors are similar to the dq0 quantities for symmetrical conditions since both yield DC quantities in a rotating reference frame.
 The network abc dynamic phasor quantities can be converted to dq0 dynamic phasors by applying the symmetrical components transformation and a rotation.&lt;/p>
 &lt;p>The angle $\delta$ is the orientation of the dq0 reference frame relative to the abc frame.&lt;/p>
-&lt;p>\begin{align}
-\langle i_{ds} \rangle_{0} &amp;amp;= \mathbf{Re} \left{ \langle i_{p} \rangle_1 \ \mathrm{e}^{-j \delta} \right} \nonumber \
-\langle i_{qs} \rangle_{0} &amp;amp;= \mathbf{Im} \left{ \langle i_{p} \rangle_1 \ \mathrm{e}^{-j \delta} \right} \nonumber \
-\langle i_{ds} \rangle_{2} &amp;amp;= \mathbf{Re} \left{ \langle i_{n} \rangle_{1}^* \ \mathrm{e}^{-j \delta} \right} \nonumber \
-\langle i_{qs} \rangle_{2} &amp;amp;= \mathbf{Im} \left{ \langle i_{n} \rangle_{1}^* \ \mathrm{e}^{-j \delta} \right} \nonumber \
-\langle i_{0s} \rangle_{1} &amp;amp;= \mathbf{Re} \left{ \langle i_{z} \rangle_1 \right}
-\label{eq:syngen_abc_dq0_conversion}
-\end{align}&lt;/p>
-&lt;p>The winding currents for positive and zero sequence components can be expressed as:&lt;/p>
-&lt;p>\begin{align}
-\langle i_{ds} \rangle_0 &amp;amp;= \frac{\langle \lambda_{ds} \rangle_0 - \langle \lambda_{md} \rangle_0 }{L_{ls}} \nonumber \
-\langle i_{qs} \rangle_0 &amp;amp;= \frac{\langle \lambda_{qs} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{ls}} \nonumber \
-\langle i_{0s} \rangle_1 &amp;amp;= \frac{\langle \lambda_{0s} \rangle_1}{L_{ls}} \nonumber \
-\langle i_{fd} \rangle_0 &amp;amp;= \frac{\langle \lambda_{fd} \rangle_0 - \langle \lambda_{md} \rangle_0}{L_{lfd}} \nonumber \
-\langle i_{kd} \rangle_0 &amp;amp;= \frac{\langle \lambda_{kd} \rangle_0 - \langle \lambda_{md} \rangle_0}{L_{lkd}} \nonumber \
-\langle i_{kq1} \rangle_0 &amp;amp;= \frac{\langle \lambda_{kq1} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{lkq1}} \nonumber \
-\langle i_{kq2} \rangle_0 &amp;amp;= \frac{\langle \lambda_{kq2} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{lkq2}}.
-\end{align}&lt;/p>
-&lt;p>\begin{align}
-\frac{d}{dt} \langle \lambda_{ds} \rangle_0 &amp;amp;= \langle v_{ds} \rangle_0 + \langle \omega_r \rangle_0 \langle \lambda_{qs} \rangle_0 + \frac{R_s}{L_{ls}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{ds} \rangle_0 \right) \nonumber \
-\frac{d}{dt} \langle \lambda_{qs} \rangle_0 &amp;amp;= \langle v_{qs} \rangle_0 - \langle \omega_r \rangle_0 \langle \lambda_{ds} \rangle_0 + \frac{R_s}{L_{ls}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{qs} \rangle_0 \right) \nonumber \
-\frac{d}{dt} \langle \lambda_{0s} \rangle_1 &amp;amp;= \langle v_{0s} \rangle_1 - \frac{R_s}{L_{ls}} \langle \lambda_{0s} \rangle_1 -j \omega_s \langle \lambda_{0s} \rangle_1 \nonumber \
-\frac{d}{dt} \langle \lambda_{fd} \rangle_0 &amp;amp;= \langle v_{fd} \rangle_0 + \frac{R_{fd}}{L_{lfd}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{fd} \rangle_0 \right) \nonumber \
-\frac{d}{dt} \langle \lambda_{kd} \rangle_0 &amp;amp;= \frac{R_{kd}}{L_{lkd}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{kd} \rangle_0 \right) \nonumber \
-\frac{d}{dt} \langle \lambda_{kq1} \rangle_0 &amp;amp;= \frac{R_{kq1}}{L_{lkq1}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{kq1} \rangle_0 \right) \nonumber \
-\frac{d}{dt} \langle \lambda_{kq2} \rangle_0 &amp;amp;= \frac{R_{kq2}}{L_{lkq2}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{kq2} \rangle_0 \right).
-\end{align}&lt;/p>
-&lt;p>In the dynamic phasor case, the equation for $\frac{d}{dt} \langle \lambda_{0s} \rangle_1$ has a frequency shift.
+&lt;div class="math">$$\begin{align}
+\langle i_{ds} \rangle_{0} &amp;= \mathbf{Re} \left\{ \langle i_{p} \rangle_1 \ \mathrm{e}^{-j \delta} \right\} \nonumber \\
+\langle i_{qs} \rangle_{0} &amp;= \mathbf{Im} \left\{ \langle i_{p} \rangle_1 \ \mathrm{e}^{-j \delta} \right\} \nonumber \\
+\langle i_{ds} \rangle_{2} &amp;= \mathbf{Re} \left\{ \langle i_{n} \rangle_{1}^* \ \mathrm{e}^{-j \delta} \right\} \nonumber \\
+\langle i_{qs} \rangle_{2} &amp;= \mathbf{Im} \left\{ \langle i_{n} \rangle_{1}^* \ \mathrm{e}^{-j \delta} \right\} \nonumber \\
+\langle i_{0s} \rangle_{1} &amp;= \mathbf{Re} \left\{ \langle i_{z} \rangle_1 \right\}
+\end{align}$$&lt;/div>&lt;p>The winding currents for positive and zero sequence components can be expressed as&lt;/p>
+&lt;div class="math">$$\begin{align}
+\langle i_{ds} \rangle_0 &amp;= \frac{\langle \lambda_{ds} \rangle_0 - \langle \lambda_{md} \rangle_0 }{L_{ls}} \nonumber \\
+\langle i_{qs} \rangle_0 &amp;= \frac{\langle \lambda_{qs} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{ls}} \nonumber \\
+\langle i_{0s} \rangle_1 &amp;= \frac{\langle \lambda_{0s} \rangle_1}{L_{ls}} \nonumber \\
+\langle i_{fd} \rangle_0 &amp;= \frac{\langle \lambda_{fd} \rangle_0 - \langle \lambda_{md} \rangle_0}{L_{lfd}} \nonumber \\
+\langle i_{kd} \rangle_0 &amp;= \frac{\langle \lambda_{kd} \rangle_0 - \langle \lambda_{md} \rangle_0}{L_{lkd}} \nonumber \\
+\langle i_{kq1} \rangle_0 &amp;= \frac{\langle \lambda_{kq1} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{lkq1}} \nonumber \\
+\langle i_{kq2} \rangle_0 &amp;= \frac{\langle \lambda_{kq2} \rangle_0 - \langle \lambda_{mq} \rangle_0}{L_{lkq2}}.
+\end{align}$$&lt;/div>
+&lt;div class="math">$$\begin{align}
+\frac{d}{dt} \langle \lambda_{ds} \rangle_0 &amp;= \langle v_{ds} \rangle_0 + \langle \omega_r \rangle_0 \langle \lambda_{qs} \rangle_0 + \frac{R_s}{L_{ls}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{ds} \rangle_0 \right) \nonumber \\
+\frac{d}{dt} \langle \lambda_{qs} \rangle_0 &amp;= \langle v_{qs} \rangle_0 - \langle \omega_r \rangle_0 \langle \lambda_{ds} \rangle_0 + \frac{R_s}{L_{ls}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{qs} \rangle_0 \right) \nonumber \\
+\frac{d}{dt} \langle \lambda_{0s} \rangle_1 &amp;= \langle v_{0s} \rangle_1 - \frac{R_s}{L_{ls}} \langle \lambda_{0s} \rangle_1 -j \omega_s \langle \lambda_{0s} \rangle_1 \nonumber \\
+\frac{d}{dt} \langle \lambda_{fd} \rangle_0 &amp;= \langle v_{fd} \rangle_0 + \frac{R_{fd}}{L_{lfd}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{fd} \rangle_0 \right) \nonumber \\
+\frac{d}{dt} \langle \lambda_{kd} \rangle_0 &amp;= \frac{R_{kd}}{L_{lkd}} \left( \langle \lambda_{md} \rangle_0 - \langle \lambda_{kd} \rangle_0 \right) \nonumber \\
+\frac{d}{dt} \langle \lambda_{kq1} \rangle_0 &amp;= \frac{R_{kq1}}{L_{lkq1}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{kq1} \rangle_0 \right) \nonumber \\
+\frac{d}{dt} \langle \lambda_{kq2} \rangle_0 &amp;= \frac{R_{kq2}}{L_{lkq2}} \left( \langle \lambda_{mq} \rangle_0 - \langle \lambda_{kq2} \rangle_0 \right).
+\end{align}$$&lt;/div>&lt;p>In the dynamic phasor case, the equation for $\frac{d}{dt} \langle \lambda_{0s} \rangle_1$ has a frequency shift.
 To complete the state model, the magnetizing flux linkages are expressed as:&lt;/p>
-&lt;p>\begin{align}
-\langle \lambda_{md} \rangle_0 &amp;amp;= L_{ad} \left( \frac{\langle \lambda_{ds} \rangle_0}{L_{ls}} + \frac{\langle \lambda_{fd} \rangle_0}{L_{lfd}} + \frac{\langle \lambda_{kd} \rangle_0}{L_{lkd}} \right) \nonumber \
-\langle \lambda_{mq} \rangle_0 &amp;amp;= L_{aq} \left( \frac{\langle \lambda_{qs} \rangle_0}{L_{ls}} + \frac{\langle \lambda_{kq1} \rangle_0}{L_{lkq1}} + \frac{\langle \lambda_{kq2} \rangle_0}{L_{lkq2}} \right)
-\label{eq:winding_flux_linkages}
-\end{align}&lt;/p>
-&lt;p>where&lt;/p>
-&lt;p>\begin{align}
-L_{ad} &amp;amp;= \left( \frac{1}{L_{md}} + \frac{1}{L_{ls}} + \frac{1}{L_{lfd}} + \frac{1}{L_{lkd}} \right) \nonumber \
-L_{aq} &amp;amp;= \left( \frac{1}{L_{mq}} + \frac{1}{L_{ls}} + \frac{1}{L_{lkq1}} + \frac{1}{L_{lkq2}} \right).
-\end{align}&lt;/p>
-&lt;p>The mechanical equations in dynamic phasors are:&lt;/p>
-&lt;p>\begin{align}
-T_e &amp;amp;= \langle \lambda_{qs} \rangle_0 \langle i_{ds} \rangle_0 - \langle \lambda_{ds} \rangle_0 \langle i_{qs} \rangle_0 \
-\frac{1}{\omega_s} \frac{d \delta_r}{dt} &amp;amp;= \omega_r - 1 \
-\frac{d \omega_r}{dt} &amp;amp;= \frac{1}{2H} (T_m - T_e).
-\end{align}&lt;/p>
-&lt;h2 id="transient-stability-model">Transient Stability Model&lt;/h2></description></item><item><title>Docs: VS-Inverter</title><link>https://sogno-platform.github.io/dpsim/docs/models/power-electronics/</link><pubDate>Wed, 18 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/models/power-electronics/</guid><description/></item><item><title>Docs: Build</title><link>https://sogno-platform.github.io/dpsim/docs/getting-started/build/</link><pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/getting-started/build/</guid><description>
-&lt;h2 id="docker-based">Docker based&lt;/h2>
-&lt;p>Clone the repository&lt;/p>
-&lt;pre>&lt;code>$ git clone git@github.com:sogno-platform/dpsim.git
-&lt;/code>&lt;/pre>
-&lt;p>or using https if you do not have an account&lt;/p>
-&lt;pre>&lt;code>$ git clone https://github.com/sogno-platform/dpsim.git
-&lt;/code>&lt;/pre>
-&lt;p>In the repository, there is a Docker file with all required dependencies&lt;/p>
-&lt;pre>&lt;code>$ cd dpsim
-$ docker build -t sogno/dpsim:dev -f Packaging/Docker/Dockerfile.dev .
-&lt;/code>&lt;/pre>
-&lt;p>Alternatively, the image can be pulled from DockerHub like so&lt;/p>
-&lt;pre>&lt;code>$ docker pull sogno/dpsim:dev
-&lt;/code>&lt;/pre>
-&lt;p>For OS specific instructions on how to install requirements, see the sections below.&lt;/p>
-&lt;p>Next, run a Docker container&lt;/p>
-&lt;pre>&lt;code>$ cd dpsim
-$ docker run -it -p 8888:8888 -v $(pwd):/dpsim --privileged sogno/dpsim:dev bash
-&lt;/code>&lt;/pre>
-&lt;p>The option &lt;code>-p&lt;/code> maps the port 8888 of the container to the docker host. This is required to access the jupyter lab instance inside the container. The option &lt;code>--privileged&lt;/code> is required for debug builds.&lt;/p>
-&lt;p>For Windows, you might need to specify the current directory with curly brackets&lt;/p>
-&lt;pre>&lt;code>$ docker run -it -p 8888:8888 -v ${pwd}:/dpsim --privileged sogno/dpsim:dev bash
-&lt;/code>&lt;/pre>
-&lt;p>Now, you should be in an interactive session inside the docker container.&lt;/p>
-&lt;p>The DPsim C++ and Python library without C++ examples or documentation can be built as follows&lt;/p>
-&lt;pre>&lt;code>$ cd /dpsim
-$ mkdir build &amp;amp;&amp;amp; cd build
-$ cmake ..
-$ cmake --build . --target dpsimpy
-&lt;/code>&lt;/pre>
-&lt;p>To build everything run&lt;/p>
-&lt;pre>&lt;code>$ cmake --build .
-&lt;/code>&lt;/pre>
-&lt;p>If you would like to use the Python package, it has to be added to the path.
-The following command adds the dpsimpy C++/Python package as well as the dpsim pure Python package.&lt;/p>
-&lt;pre>&lt;code>$ cd /dpsim/build
-$ export PYTHONPATH=$(pwd):$(pwd)/../python/src/
-&lt;/code>&lt;/pre>
-&lt;p>To run jupyter lab&lt;/p>
-&lt;pre>&lt;code>$ cd /dpsim
-$ jupyter lab --ip=&amp;quot;0.0.0.0&amp;quot; --allow-root --no-browser
-&lt;/code>&lt;/pre>
-&lt;p>To install dpsim run&lt;/p>
-&lt;pre>&lt;code>$ cd /dpsim/build
-$ sudo make install
-&lt;/code>&lt;/pre>
-&lt;h2 id="cmake-for-linux">CMake for Linux&lt;/h2>
-&lt;p>The most recent list of requirements can be found in the Dockerfiles.&lt;/p>
-&lt;p>Make sure that the required dependencies are installed.
-The &lt;a href="https://git.rwth-aachen.de/acs/public/simulation/dpsim/dpsim/-/blob/master/Packaging/install-fedora-deps.sh">fedora installation script&lt;/a> in the DPsim repository is a good place to start from.&lt;/p>
-&lt;p>&lt;strong>Note:&lt;/strong> There are currently no Debian packages for &lt;code>villas-node&lt;/code> and &lt;code>libcimpp16v29a&lt;/code>.
-If you want to use these optional feature, you have to build them manually.&lt;/p>
-&lt;p>Install Sundials&lt;/p>
-&lt;pre>&lt;code>$ git clone --branch v3.1.1 https://github.com/LLNL/sundials.git
-$ mkdir sundials/build
-$ pushd sundials/build
-$ cmake .. \
--DBUILD_SHARED_LIBS=ON \
--DBUILD_STATIC_LIBS=OFF \
--DEXAMPLES_ENABLE_C=OFF
-$ make -j$(nproc) install
-$ popd
-&lt;/code>&lt;/pre>
-&lt;p>The following steps to clone, build and install are the same as for the Docker setup.&lt;/p>
-&lt;h2 id="cmake-for-windows">CMake for Windows&lt;/h2>
-&lt;p>Make sure that the required dependecies are installed:&lt;/p>
-&lt;ul>
-&lt;li>Visual Studio 2017 with C++ Desktop development package&lt;/li>
-&lt;li>&lt;a href="https://cmake.org/">CMake&lt;/a> for Windows&lt;/li>
-&lt;li>&lt;a href="https://git-scm.com/download/win">Git for Windows&lt;/a>&lt;/li>
-&lt;li>For Python support, install Python3, for example, Anaconda, and add Python to your PATH.&lt;/li>
-&lt;/ul>
-&lt;p>Clone the project as explained for Docker.&lt;/p>
-&lt;p>Open a windows command prompt and navigate into the new DPsim folder.
-Generate a Visual Studio project with CMake and use it to build the project&lt;/p>
-&lt;pre>&lt;code>$ mkdir build
-$ cd build
-$ cmake -G &amp;quot;Visual Studio 15 2017 Win64&amp;quot; ..
-&lt;/code>&lt;/pre>
-&lt;p>Open Visual Studio and load the Visual Studio project from the build directory within the DPsim folder.&lt;/p>
-&lt;p>You can either build the project from within Visual Studio or from the command line by running the following command in the windows command prompt&lt;/p>
-&lt;pre>&lt;code>$ cmake --build .
-&lt;/code>&lt;/pre>
-&lt;p>To install the Python package use Visual Studio and the Release configuration to build the DPsim Python module and then build the INSTALL project.&lt;/p>
-&lt;h2 id="cmake-for-macos">CMake for macOS&lt;/h2>
-&lt;p>Make sure that the required dependecies are installed&lt;/p>
-&lt;pre>&lt;code>$ /usr/bin/ruby -e &amp;quot;$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)&amp;quot;
-$ brew install gcc9 git cmake graphviz python3 gsl eigen spdlog
-$ sudo pip3 install numpy
-&lt;/code>&lt;/pre>
-&lt;p>Clone the source as explained for the Docker setup.&lt;/p>
-&lt;p>Compile&lt;/p>
-&lt;pre>&lt;code>$ mkdir build
-$ cmake ..
-$ make -j$(sysctl -n hw.ncpu)
-&lt;/code>&lt;/pre>
-&lt;p>To install the generated Python module to your system&lt;/p>
-&lt;pre>&lt;code>$ sudo make install
-&lt;/code>&lt;/pre>
-&lt;h2 id="python-package-for-pypi">Python Package for pypi&lt;/h2>
-&lt;p>Follow the previous steps to set up the Docker container.&lt;/p>
-&lt;p>To build the Python package run&lt;/p>
-&lt;pre>&lt;code>$ python3 setup.py bdist_wheel
-&lt;/code>&lt;/pre>
-&lt;h2 id="documentation">Documentation&lt;/h2>
-&lt;h3 id="python">Python&lt;/h3>
-&lt;p>Install &lt;a href="https://www.sphinx-doc.org/en/master/">Sphinx&lt;/a> or use the Docker image.&lt;/p>
-&lt;p>Generate the Python documentation by running Sphinx via CMake:&lt;/p>
-&lt;pre>&lt;code>$ mkdir -p build &amp;amp;&amp;amp; cd build
-$ cmake ..
-$ make docs
-&lt;/code>&lt;/pre>
-&lt;p>The resulting documentation will be generated in &lt;code>Documentation/html/&lt;/code>.&lt;/p>
-&lt;h3 id="c">C++&lt;/h3>
-&lt;p>Install &lt;a href="http://www.doxygen.nl/">Doxygen&lt;/a> or use the Docker image.&lt;/p>
-&lt;p>Generate the C++ documentation by running Doxygen via CMake:&lt;/p>
-&lt;pre>&lt;code>$ mkdir -p build &amp;amp;&amp;amp; cd build
-$ cmake ..
-$ make docs_cxx
-&lt;/code>&lt;/pre>
-&lt;p>The resulting documentation will be generated in &lt;code>Documentation/html/Cxx&lt;/code>.&lt;/p></description></item><item><title>Docs: Install</title><link>https://sogno-platform.github.io/dpsim/docs/getting-started/install/</link><pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/getting-started/install/</guid><description>
+&lt;div class="math">$$\begin{align}
+\langle \lambda_{md} \rangle_0 &amp;= L_{ad} \left( \frac{\langle \lambda_{ds} \rangle_0}{L_{ls}} + \frac{\langle \lambda_{fd} \rangle_0}{L_{lfd}} + \frac{\langle \lambda_{kd} \rangle_0}{L_{lkd}} \right) \nonumber \\
+\langle \lambda_{mq} \rangle_0 &amp;= L_{aq} \left( \frac{\langle \lambda_{qs} \rangle_0}{L_{ls}} + \frac{\langle \lambda_{kq1} \rangle_0}{L_{lkq1}} + \frac{\langle \lambda_{kq2} \rangle_0}{L_{lkq2}} \right)
+\end{align}$$&lt;/div>&lt;p>where&lt;/p>
+&lt;div class="math">$$\begin{align}
+L_{ad} &amp;= \left( \frac{1}{L_{md}} + \frac{1}{L_{ls}} + \frac{1}{L_{lfd}} + \frac{1}{L_{lkd}} \right) \nonumber \\
+L_{aq} &amp;= \left( \frac{1}{L_{mq}} + \frac{1}{L_{ls}} + \frac{1}{L_{lkq1}} + \frac{1}{L_{lkq2}} \right).
+\end{align}$$&lt;/div>&lt;p>The mechanical equations in dynamic phasors are:&lt;/p>
+&lt;div class="math">$$\begin{align}
+T_e &amp;= \langle \lambda_{qs} \rangle_0 \langle i_{ds} \rangle_0 - \langle \lambda_{ds} \rangle_0 \langle i_{qs} \rangle_0 \\
+\frac{1}{\omega_s} \frac{d \delta_r}{dt} &amp;= \omega_r - 1 \\
+\frac{d \omega_r}{dt} &amp;= \frac{1}{2H} (T_m - T_e).
+\end{align}$$&lt;/div>&lt;h2 id="transient-stability-model">Transient Stability Model&lt;/h2></description></item><item><title>Docs: VS-Inverter</title><link>https://sogno-platform.github.io/dpsim/docs/models/power-electronics/</link><pubDate>Wed, 18 Mar 2020 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/models/power-electronics/</guid><description/></item><item><title>Docs: Install</title><link>https://sogno-platform.github.io/dpsim/docs/getting-started/install/</link><pubDate>Thu, 05 Jan 2017 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/getting-started/install/</guid><description>
 &lt;p>DPsim is a Python module / C++ library for complex power system
 simulation. As a Python module, the easiest way to get to know DPsim is
 via &lt;a href="https://jupyter-notebook-beginner-guide.readthedocs.io/en/latest/">Jupyter Notebooks&lt;/a>.&lt;/p>
@@ -1160,6 +1398,30 @@ Make sure to adapt your PYTHONPATH variable if necessary.&lt;/p>
 ]
 }&lt;/code>&lt;/pre></description></item><item><title>Docs: Guidelines</title><link>https://sogno-platform.github.io/dpsim/docs/development/guidelines/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://sogno-platform.github.io/dpsim/docs/development/guidelines/</guid><description>
 &lt;p>This is a summary of general guidelines for the development of DPsim.&lt;/p>
+&lt;h2 id="scaling-of-voltages-and-currents">Scaling of Voltages and Currents&lt;/h2>
+&lt;p>Voltage quantities are expressed either as phase-to-phase RMS values (denominated as &lt;code>RMS3PH&lt;/code>) or as phase-to-ground peak values (denominated as &lt;code>PEAK1PH&lt;/code>):&lt;/p>
+&lt;ul>
+&lt;li>Initialisation quantities (e.g. &lt;code>initialSingleVoltage&lt;/code> of &lt;code>SimPowerComp&lt;/code>) as &lt;code>RMS3PH&lt;/code> values&lt;/li>
+&lt;li>Simulation quantities in both &lt;code>SP&lt;/code> and &lt;code>DP&lt;/code> domain (e.g. &lt;code>mIntfVoltage&lt;/code> of &lt;code>DP::Ph1::PiLine&lt;/code>) as &lt;code>RMS3PH values&lt;/code>&lt;/li>
+&lt;li>Simulation quantities in the &lt;code>EMT&lt;/code> domain (e.g. &lt;code>mIntfVoltage&lt;/code> of &lt;code>EMT::Ph3::Transformer&lt;/code>) as &lt;code>PEAK1PH&lt;/code> values&lt;/li>
+&lt;/ul>
+&lt;p>Current quantities are expressed either as &lt;code>RMS&lt;/code> or as &lt;code>PEAK&lt;/code> values:&lt;/p>
+&lt;ul>
+&lt;li>Simulation quantities in both &lt;code>SP&lt;/code> and &lt;code>DP&lt;/code> domain (e.g. &lt;code>mIntfCurrent&lt;/code> of &lt;code>DP::Ph1::PiLine&lt;/code>) as &lt;code>RMS&lt;/code> values&lt;/li>
+&lt;li>Simulation quantities in the &lt;code>EMT&lt;/code> domain (e.g. &lt;code>mIntfCurrent&lt;/code> of &lt;code>EMT::Ph3::Transformer&lt;/code>) as &lt;code>PEAK&lt;/code> values&lt;/li>
+&lt;/ul>
 &lt;h2 id="logging">Logging&lt;/h2>
 &lt;p>Debug or trace should be the default log level for information that might be nice to have but not necessary for every simulation case.&lt;/p>
-&lt;p>Calls to the logger that might occur during simulation must use spdlog macros, like SPDLOG_LOGGER_INFO.&lt;/p></description></item></channel></rss>
+&lt;p>Calls to the logger that might occur during simulation must use spdlog macros, like SPDLOG_LOGGER_INFO.&lt;/p>
+&lt;h2 id="creating-new-releases">Creating New Releases&lt;/h2>
+&lt;p>Although DPsim currently does not have any conventions on versioning, the periodic creation of
+new versions can help to mark significant changes and to analyze new portions of code using tools like SonarCloud.&lt;/p>
+&lt;p>A new version of DPsim has to be indicated as follows:&lt;/p>
+&lt;ul>
+&lt;li>Create a new tag with an increased version number&lt;/li>
+&lt;li>Update setup.cfg&lt;/li>
+&lt;li>Update CMakeLists.txt&lt;/li>
+&lt;li>Update sonar-project.properties&lt;/li>
+&lt;/ul>
+&lt;p>Due to the creation of a new tag, a new PyPi package will be deployed automatically.
+To release an updated Docker image, the container workflow needs to be triggered manually.&lt;/p></description></item></channel></rss>
