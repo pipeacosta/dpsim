@@ -33,7 +33,7 @@ protected:
   /// Capacitance [F]
   Matrix mCapacitance;
   ///
-  Bool initPowerFromTerminal = true;
+  Bool doInitPowerFromTerminal = true;
   /// If set to true, the reactance is in series with the resistor. Otherwise it is parallel to the resistor.
   Bool mReactanceInSeries;
   /// Internal inductor
@@ -58,12 +58,16 @@ public:
   RXLoad(String name, Matrix activePower, Matrix reactivePower, Real volt,
          Logger::Level logLevel = Logger::Level::off);
 
+  SimPowerComp<Real>::Ptr clone(String name) override;
+  
   // #### General ####
   virtual String description() override { return fmt::format("Active: {}MW, Reactive: {}MVAr, Voltage: {}kV", (**mActivePower)(0, 0) / 1e6, (**mReactivePower)(0, 0) / 1e6, (**mNomVoltage) / 1e3); };
   ///
   void setParameters(Matrix activePower, Matrix reactivePower, Real volt, bool reactanceInSeries = false);
   /// Initializes component from power flow data
   void initializeFromNodesAndTerminals(Real frequency) override;
+  ///
+  void initPowerFromTerminal();
 
   // #### MNA section ####
   void mnaCompUpdateCurrent(const Matrix &leftVector) override;
