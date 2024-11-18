@@ -33,7 +33,7 @@ protected:
   /// Capacitance [F]
   Matrix mCapacitance;
   ///
-  Bool initPowerFromTerminal = true;
+  Bool doInitPowerFromTerminal = true;
   /// Internal inductor
   std::shared_ptr<EMT::Ph3::Inductor> mSubInductor;
   /// Internal capacitor
@@ -56,11 +56,15 @@ public:
   RXLoad(String name, Matrix activePower, Matrix reactivePower, Real volt,
          Logger::Level logLevel = Logger::Level::off);
 
+  SimPowerComp<Real>::Ptr clone(String name) override;
+  
   // #### General ####
   ///
   void setParameters(Matrix activePower, Matrix reactivePower, Real volt);
   /// Initializes component from power flow data
   void initializeFromNodesAndTerminals(Real frequency) override;
+  ///
+  void initPowerFromTerminal();
 
   // #### MNA section ####
   void mnaCompUpdateCurrent(const Matrix &leftVector) override;
