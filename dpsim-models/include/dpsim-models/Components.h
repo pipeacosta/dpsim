@@ -128,6 +128,7 @@
 #include <dpsim-models/Signal/CosineFMGenerator.h>
 #include <dpsim-models/Signal/DecouplingLine.h>
 #include <dpsim-models/Signal/DecouplingLineEMT.h>
+#include <dpsim-models/Signal/DecouplingIdealTransformerEMT.h>
 #include <dpsim-models/Signal/Exciter.h>
 #include <dpsim-models/Signal/FIRFilter.h>
 #include <dpsim-models/Signal/FrequencyRampGenerator.h>
