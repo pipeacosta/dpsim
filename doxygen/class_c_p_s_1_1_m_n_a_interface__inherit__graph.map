@@ -1,9 +1,9 @@
 <map id="CPS::MNAInterface" name="CPS::MNAInterface">
-<area shape="rect" id="node1" title="Interface to be implemented by all models used by the MNA solver." alt="" coords="5,1164,148,1191"/>
+<area shape="rect" id="node1" title="Interface to be implemented by all models used by the MNA solver." alt="" coords="5,1172,148,1199"/>
 <area shape="rect" id="node2" href="$class_c_p_s_1_1_m_n_a_sim_power_comp.html" title=" " alt="" coords="583,839,765,881"/>
-<area shape="rect" id="node34" href="$class_c_p_s_1_1_m_n_a_sim_power_comp.html" title=" " alt="" coords="583,1923,765,1965"/>
-<area shape="rect" id="node48" href="$class_c_p_s_1_1_d_p_1_1_ph3_1_1_synchron_generator_v_b_r.html" title=" " alt="" coords="197,1193,456,1220"/>
-<area shape="rect" id="node49" href="$class_c_p_s_1_1_m_n_a_sim_power_comp.html" title="Base class for all MNA components that are transmitting power." alt="" coords="235,1127,418,1169"/>
+<area shape="rect" id="node34" href="$class_c_p_s_1_1_m_n_a_sim_power_comp.html" title=" " alt="" coords="583,1953,765,1994"/>
+<area shape="rect" id="node48" href="$class_c_p_s_1_1_d_p_1_1_ph3_1_1_synchron_generator_v_b_r.html" title=" " alt="" coords="197,1201,456,1228"/>
+<area shape="rect" id="node49" href="$class_c_p_s_1_1_m_n_a_sim_power_comp.html" title="Base class for all MNA components that are transmitting power." alt="" coords="235,1135,418,1177"/>
 <area shape="rect" id="node3" href="$class_c_p_s_1_1_base_1_1_reduced_order_synchron_generator.html" title=" " alt="" coords="822,665,1061,706"/>
 <area shape="rect" id="node4" href="$class_c_p_s_1_1_composite_power_comp.html" title=" " alt="" coords="844,730,1039,771"/>
 <area shape="rect" id="node5" href="$class_c_p_s_1_1_d_p_1_1_ph1_1_1_capacitor.html" title="Capacitor model." alt="" coords="857,796,1026,823"/>
@@ -35,17 +35,17 @@
 <area shape="rect" id="node31" href="$class_c_p_s_1_1_s_p_1_1_ph3_1_1_inductor.html" title="Inductor." alt="" coords="860,512,1023,539"/>
 <area shape="rect" id="node32" href="$class_c_p_s_1_1_s_p_1_1_ph3_1_1_resistor.html" title=" " alt="" coords="862,563,1021,589"/>
 <area shape="rect" id="node33" href="$class_c_p_s_1_1_s_p_1_1_ph3_1_1_voltage_source.html" title="Ideal Voltage source model." alt="" coords="843,613,1040,640"/>
-<area shape="rect" id="node35" href="$class_c_p_s_1_1_base_1_1_reduced_order_synchron_generator.html" title=" " alt="" coords="822,1923,1061,1965"/>
-<area shape="rect" id="node36" href="$class_c_p_s_1_1_composite_power_comp.html" title=" " alt="" coords="844,1989,1039,2030"/>
-<area shape="rect" id="node37" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_capacitor.html" title="Capacitor model." alt="" coords="853,2055,1030,2081"/>
-<area shape="rect" id="node38" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_current_source.html" title="Ideal current source model." alt="" coords="837,2105,1046,2132"/>
-<area shape="rect" id="node39" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_inductor.html" title="Inductor." alt="" coords="855,2156,1028,2183"/>
-<area shape="rect" id="node40" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_resistor.html" title="EMT Resistor." alt="" coords="857,2207,1026,2233"/>
-<area shape="rect" id="node41" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_switch.html" title="One phase EMT switch." alt="" coords="862,2257,1021,2284"/>
-<area shape="rect" id="node42" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_voltage_source.html" title="Ideal Voltage source model." alt="" coords="837,2308,1045,2335"/>
+<area shape="rect" id="node35" href="$class_c_p_s_1_1_base_1_1_reduced_order_synchron_generator.html" title=" " alt="" coords="822,1953,1061,1994"/>
+<area shape="rect" id="node36" href="$class_c_p_s_1_1_composite_power_comp.html" title=" " alt="" coords="844,2018,1039,2059"/>
+<area shape="rect" id="node37" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_capacitor.html" title="Capacitor model." alt="" coords="853,2084,1030,2111"/>
+<area shape="rect" id="node38" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_current_source.html" title="Ideal current source model." alt="" coords="837,2135,1046,2161"/>
+<area shape="rect" id="node39" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_inductor.html" title="Inductor." alt="" coords="855,2185,1028,2212"/>
+<area shape="rect" id="node40" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_resistor.html" title="EMT Resistor." alt="" coords="857,2236,1026,2263"/>
+<area shape="rect" id="node41" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_switch.html" title="One phase EMT switch." alt="" coords="862,2287,1021,2313"/>
+<area shape="rect" id="node42" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_voltage_source.html" title="Ideal Voltage source model." alt="" coords="837,2337,1045,2364"/>
 <area shape="rect" id="node43" href="$class_c_p_s_1_1_e_m_t_1_1_ph1_1_1_voltage_source_norton.html" title="Voltage source as Norton equivalent." alt="" coords="837,1639,1045,1681"/>
 <area shape="rect" id="node44" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_av_volt_source_inverter_state_space.html" title="average inverter model with LC filter" alt="" coords="841,1705,1042,1746"/>
 <area shape="rect" id="node45" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_capacitor.html" title="Capacitor model." alt="" coords="853,1771,1030,1797"/>
-<area shape="rect" id="node46" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_current_source.html" title="Ideal current source model." alt="" coords="837,1821,1046,1848"/>
-<area shape="rect" id="node47" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_inductor.html" title="Inductor." alt="" coords="855,1872,1028,1899"/>
+<area shape="rect" id="node46" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_controlled_current_source.html" title="Ideal current source model." alt="" coords="850,1822,1033,1863"/>
+<area shape="rect" id="node47" href="$class_c_p_s_1_1_e_m_t_1_1_ph3_1_1_controlled_voltage_source.html" title="Controlled Ideal Voltage source model." alt="" coords="850,1887,1033,1929"/>
 </map>
