@@ -81,8 +81,16 @@ class Reader:
         self.mpc_bus_data["area"] = self.mpc_bus_data["area"].astype(int)
         self.mpc_bus_data["zone"] = self.mpc_bus_data["zone"].astype(int)
 
+        # remove isolated busses
+        self.mpc_bus_data= self.mpc_bus_data[(self.mpc_bus_data['type'] !=4)]
+
+        # # remove busses with Pd & Qd & Gs & Bs =0 ?
+        # self.mpc_bus_data= self.mpc_bus_data[((self.mpc_bus_data['Pd'] !=0) | (self.mpc_bus_data['Qd'] !=0) | (self.mpc_bus_data['Gs'] !=0) | (self.mpc_bus_data['Bs'] !=0))]
+
+
         #### Generators #####
         mpc_gen_raw = self.mpc_raw[self.mpc_name]["gen"]
+
         gen_data_header = [
             "bus",
             "Pg",
@@ -112,9 +120,13 @@ class Reader:
         self.mpc_gen_data["bus"] = self.mpc_gen_data["bus"].astype(int)
         self.mpc_gen_data["status"] = self.mpc_gen_data["status"].astype(int)
 
+        # remove gens with status =0
+        self.mpc_gen_data= self.mpc_gen_data[self.mpc_gen_data['status'] == 1]
+
         #### Branches #####
         # extract only first 13 columns since following columns include results
         mpc_branch_raw = self.mpc_raw[self.mpc_name]["branch"][:, :13]
+
         branch_data_header = [
             "fbus",
             "tbus",
@@ -377,7 +389,29 @@ class Reader:
                 # shunts
                 self.map_shunt(index, bus_index)
 
-            # Generators
+                ### PQ GENERATORS ###
+                if self.mpc_bus_data.at[index,'bus_i'] in self.mpc_gen_data['bus'].values:
+                    generator = generator + 1
+                    gen_name = "gen%s" %generator
+
+                    # relevant data from self.mpc_gen_data. Identification with bus number available in mpc_bus_data and mpc_gen_data
+                    gen = self.mpc_gen_data.loc[self.mpc_gen_data['bus'] == self.mpc_bus_data.at[index,'bus_i']]
+
+                    gen_baseS = gen['mBase']*mw_w # gen base MVA default is mpc.baseMVA
+                    gen_baseV = self.mpc_bus_data.at[index,'baseKV']*kv_v # gen base kV
+                    gen_v = gen['Vg']*gen_baseV   # gen set point voltage (gen['Vg'] in p.u.)
+                    gen_p = gen['Pg']*mw_w   # gen ini. active power (gen['Pg'] in MVA)
+                    gen_q = gen['Qg']*mw_w   # gen ini. reactive power (gen['Qg'] in MVAr)
+                    gen_nom_s = abs(complex(gen['Pmax'], gen['Qmax'])) # gen nominal power (set default to mpc.baseMVA ? )
+
+                    dpsimpy_comp_dict[gen_name] = [dpsimpy.sp.ph1.SynchronGenerator(gen_name, dpsimpy.LogLevel.info)]
+                    dpsimpy_comp_dict[gen_name][0].set_parameters(gen_nom_s, gen_baseV, gen_p, gen_v, dpsimpy.PowerflowBusType.PQ, gen_q)
+                    dpsimpy_comp_dict[gen_name][0].set_base_voltage(gen_baseV)
+
+                    # add connections
+                    dpsimpy_comp_dict[gen_name].append([dpsimpy_busses_dict[bus_index]]) # [to bus]
+
+            # PV bus
             elif bus_type == 2:
                 # map SG
                 self.map_synchronous_machine(
@@ -418,7 +452,7 @@ class Reader:
 
             # isolated
             elif bus_type == 4:
-                print("Isolated bus type")
+                print("Isolated bus type:" + bus_name)
             else:
                 print("Bus type error")
 
