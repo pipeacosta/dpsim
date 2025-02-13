@@ -6,10 +6,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *********************************************************************************/
 
+#include "dpsim-models/Definitions.h"
 #include "dpsim-models/EMT/EMT_Ph3_PiLine.h"
 #include "dpsim-models/EMT/EMT_Ph3_RXLoad.h"
 #include "dpsim-models/IdentifiedObject.h"
-#include "dpsim-models/Signal/DecouplingIdealTransformer_EMT_Ph1.h"
+#include "dpsim-models/Signal/DecouplingIdealTransformer_EMT_Ph3.h"
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -96,12 +97,11 @@ void decoupleNode(SystemTopology &sys, const String &nodeName, const IdentifiedO
   for (auto comp : newComponents)
     sys.addComponent(comp);
 
-  Eigen::MatrixXd i_0(1,1);
-  i_0(0,0) = 0;
+  Matrix i_0 = Matrix::Zero(3,1);
 
-  auto idealTrafo = Signal::DecouplingIdealTransformer_EMT_Ph1::make("itm_" + nodeName,
+  auto idealTrafo = Signal::DecouplingIdealTransformer_EMT_Ph3::make("itm_" + nodeName,
                                                                 Logger::Level::debug);
-  idealTrafo->setParameters(nodeCopy1, nodeCopy2, 0.001, i_0, 0);
+  idealTrafo->setParameters(nodeCopy1, nodeCopy2, 0, i_0, Matrix::Zero(3,1));
   sys.addComponent(idealTrafo);
   sys.addComponents(idealTrafo->getComponents());
 }
@@ -122,12 +122,12 @@ void doSim(String &name, SystemTopology &sys, Int threads, bool isDecoupled = fa
   }
 
   if (isDecoupled) {
-    logger->logAttribute("v5_1", sys.node<EMT::SimNode>("BUS5_1")->attribute("v"));
-    logger->logAttribute("v5_2", sys.node<EMT::SimNode>("BUS5_2")->attribute("v"));
+    // logger->logAttribute("v5_1", sys.node<EMT::SimNode>("BUS5_1")->attribute("v"));
+    // logger->logAttribute("v5_2", sys.node<EMT::SimNode>("BUS5_2")->attribute("v"));
     // logger->logAttribute("v6_1", sys.node<EMT::SimNode>("BUS5_1")->attribute("v"));
     // logger->logAttribute("v6_2", sys.node<EMT::SimNode>("BUS5_2")->attribute("v"));
-    // logger->logAttribute("v8_1", sys.node<EMT::SimNode>("BUS8_1")->attribute("v"));
-    // logger->logAttribute("v8_2", sys.node<EMT::SimNode>("BUS8_2")->attribute("v"));
+    logger->logAttribute("v8_1", sys.node<EMT::SimNode>("BUS8_1")->attribute("v"));
+    logger->logAttribute("v8_2", sys.node<EMT::SimNode>("BUS8_2")->attribute("v"));
   }
 
   Simulation sim(name, Logger::Level::debug);
@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
             << " threads, sequence number " << numSeq << std::endl;
 
   // Monolithic Simulation
-  String simNameMonolithic = "WSCC-9bus_monolithic_EMT";
+  String simNameMonolithic = "WSCC-9bus_monolithic_node_EMT";
   Logger::setLogDir("logs/" + simNameMonolithic);
   CIM::Reader readerMonolithic(simNameMonolithic, Logger::Level::debug, Logger::Level::debug);
   SystemTopology systemMonolithic =
@@ -216,8 +216,8 @@ int main(int argc, char *argv[]) {
   auto load8 = systemDecoupled.component<EMT::Ph3::RXLoad>("LOAD8");
   components8_2.push_back(load8);
 
-  decoupleNode(systemDecoupled, "BUS5", components5_1, components5_2);
+  // decoupleNode(systemDecoupled, "BUS5", components5_1, components5_2);
   // decoupleNode(systemDecoupled, "BUS6", components6_1, components6_2);
-  // decoupleNode(systemDecoupled, "BUS8", components8_1, components8_2);
+  decoupleNode(systemDecoupled, "BUS8", components8_1, components8_2);
   doSim(simNameDecoupled, systemDecoupled, numThreads, true);
 }

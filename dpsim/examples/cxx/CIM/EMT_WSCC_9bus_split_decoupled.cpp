@@ -6,6 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *********************************************************************************/
 
+#include "dpsim-models/Signal/DecouplingLine_EMT_Ph3.h"
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -26,18 +27,14 @@ String decoupleLine(SystemTopology &sys, const String &lineName, const String &n
 
   String dline_name = "dline_" + node1 + "_" + node2;
 
-  auto line = Signal::DecouplingLineEMT::make(
+  auto line = Signal::DecouplingLine_EMT_Ph3::make(
     "dline_" + node1 + "_" + node2,
     Logger::Level::debug
   );
 
-  Real Rline_scalar = Rline(0,0);
-  Real Lline_scalar = Lline(0,0);
-  Real Cline_scalar = Cline(0,0);
-
   line->setParameters(
     sys.node<EMT::SimNode>(node1), sys.node<EMT::SimNode>(node2),
-    Rline_scalar, Lline_scalar, Cline_scalar);
+    Rline, Lline, Cline);
   sys.addComponent(line);
   sys.addComponents(line->getLineComponents());
 
@@ -48,9 +45,9 @@ void doSim(String &name, SystemTopology &sys, Int threads) {
 
   // Logging
   auto logger = DataLogger::make(name);
-  // logger->logAttribute("BUS5.v", sys.node<EMT::SimNode>("BUS5")->attribute("v"));
-  // logger->logAttribute("BUS6.v", sys.node<EMT::SimNode>("BUS6")->attribute("v"));
-  // logger->logAttribute("BUS8.v", sys.node<EMT::SimNode>("BUS8")->attribute("v"));
+  logger->logAttribute("BUS5.v", sys.node<EMT::SimNode>("BUS5")->attribute("v"));
+  logger->logAttribute("BUS6.v", sys.node<EMT::SimNode>("BUS6")->attribute("v"));
+  logger->logAttribute("BUS8.v", sys.node<EMT::SimNode>("BUS8")->attribute("v"));
   for (Int bus  = 1; bus <= 9; bus++) {
     String attrName = "v" + std::to_string(bus);
     String nodeName = "BUS" + std::to_string(bus);
