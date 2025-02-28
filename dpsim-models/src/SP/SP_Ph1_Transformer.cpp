@@ -38,16 +38,20 @@ SP::Ph1::Transformer::Transformer(String uid, String name,
 }
 
 void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
-                                         Real nomVoltageEnd2, Real ratioAbs,
-                                         Real ratioPhase, Real resistance,
-                                         Real inductance) {
+                                         Real nomVoltageEnd2, Real ratedPower,
+                                         Real ratioAbs, Real ratioPhase,
+                                         Real resistance, Real inductance, Real capacitance,
+                                         Real conductance) {
+
+  **mRatedPower = ratedPower;
+  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [W]", **mRatedPower);
 
   // Note: to be consistent impedance values must be referred to high voltage side (and base voltage set to higher voltage)
   Base::Ph1::Transformer::setParameters(nomVoltageEnd1, nomVoltageEnd2,
                                         ratioAbs, ratioPhase, resistance,
-                                        inductance);
-
-  SPDLOG_LOGGER_INFO(
+                                        inductance,capacitance,
+                                        conductance);
+    SPDLOG_LOGGER_INFO(
       mSLog, "Nominal Voltage End 1={} [V] Nominal Voltage End 2={} [V]",
       mNominalVoltageEnd1, mNominalVoltageEnd2);
   SPDLOG_LOGGER_INFO(
@@ -63,24 +67,12 @@ void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
   mParametersSet = true;
 }
 
-void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
-                                         Real nomVoltageEnd2, Real ratedPower,
-                                         Real ratioAbs, Real ratioPhase,
-                                         Real resistance, Real inductance) {
-
-  **mRatedPower = ratedPower;
-  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [W]", **mRatedPower);
-
-  SP::Ph1::Transformer::setParameters(nomVoltageEnd1, nomVoltageEnd2, ratioAbs,
-                                      ratioPhase, resistance, inductance);
-}
-
 /// DEPRECATED: Delete method
 SimPowerComp<Complex>::Ptr SP::Ph1::Transformer::clone(String name) {
   auto copy = Transformer::make(name, mLogLevel);
-  copy->setParameters(mNominalVoltageEnd1, mNominalVoltageEnd2, **mRatedPower,
-                      std::abs(**mRatio), std::arg(**mRatio), **mResistance,
-                      **mInductance);
+  copy->setParameters(**mNominalVoltageEnd1, **mNominalVoltageEnd2,
+                      **mRatedPower, std::abs(**mRatio), std::arg(**mRatio),
+                      **mResistance, **mInductance, **mCapacitance, **mConductance );
   return copy;
 }
 
@@ -271,8 +263,11 @@ void SP::Ph1::Transformer::calculatePerUnitParameters(Real baseApparentPower,
   // omega per unit=1, hence 1.0*mInductancePerUnit.
   mLeakagePerUnit = Complex(mResistancePerUnit, 1. * mInductancePerUnit);
   SPDLOG_LOGGER_INFO(mSLog, "Leakage Impedance={} [pu] ", mLeakagePerUnit);
+  
+  mBaseCapacitance = 1.0 / mBaseOmega / mBaseImpedance;
+  mCapacitancePerUnit = **mCapacitance / mBaseCapacitance;
 
-  mRatioAbsPerUnit = mRatioAbs / mNominalVoltageEnd1 * mNominalVoltageEnd2;
+  mRatioAbsPerUnit = mRatioAbs / **mNominalVoltageEnd1 * **mNominalVoltageEnd2;
   SPDLOG_LOGGER_INFO(mSLog, "Tap Ratio={} [pu]", mRatioAbsPerUnit);
 
   // Calculate per unit parameters of subcomps
@@ -291,11 +286,12 @@ void SP::Ph1::Transformer::pfApplyAdmittanceMatrixStamp(
   // calculate matrix stamp
   mY_element = MatrixComp(2, 2);
   Complex y = Complex(1, 0) / mLeakagePerUnit;
+  Complex ys = Complex(0, 1. * mCapacitancePerUnit) / Complex(2, 0);
 
-  mY_element(0, 0) = y;
+  mY_element(0, 0) = y + ys;
   mY_element(0, 1) = -y * mRatioAbsPerUnit;
   mY_element(1, 0) = -y * mRatioAbsPerUnit;
-  mY_element(1, 1) = y * std::pow(mRatioAbsPerUnit, 2);
+  mY_element(1, 1) = ( y + ys )* std::pow(mRatioAbsPerUnit, 2);
 
   //check for inf or nan
   for (int i = 0; i < 2; i++)
@@ -323,14 +319,14 @@ void SP::Ph1::Transformer::pfApplyAdmittanceMatrixStamp(
 
   SPDLOG_LOGGER_INFO(mSLog, "#### Y matrix stamping: {}", mY_element);
 
-  if (mSubSnubResistor1)
-    mSubSnubResistor1->pfApplyAdmittanceMatrixStamp(Y);
-  if (mSubSnubResistor2)
-    mSubSnubResistor2->pfApplyAdmittanceMatrixStamp(Y);
-  if (mSubSnubCapacitor1)
-    mSubSnubCapacitor1->pfApplyAdmittanceMatrixStamp(Y);
-  if (mSubSnubCapacitor2)
-    mSubSnubCapacitor2->pfApplyAdmittanceMatrixStamp(Y);
+  // if (mSubSnubResistor1)
+  //   mSubSnubResistor1->pfApplyAdmittanceMatrixStamp(Y);
+  // if (mSubSnubResistor2)
+  //   mSubSnubResistor2->pfApplyAdmittanceMatrixStamp(Y);
+  // if (mSubSnubCapacitor1)
+  //   mSubSnubCapacitor1->pfApplyAdmittanceMatrixStamp(Y);
+  // if (mSubSnubCapacitor2)
+  //   mSubSnubCapacitor2->pfApplyAdmittanceMatrixStamp(Y);
 }
 
 void SP::Ph1::Transformer::updateBranchFlow(VectorComp &current,

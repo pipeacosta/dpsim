@@ -67,6 +67,8 @@ private:
   Real mBaseImpedance;
   /// base inductance [H]
   Real mBaseInductance;
+  /// base capacitance [F]
+  Real mBaseCapacitance;
   /// base admittance [S]
   Real mBaseAdmittance;
   ///base omega [1/s]
@@ -81,12 +83,16 @@ private:
   Real mReactancePerUnit;
   /// inductance
   Real mInductancePerUnit;
+  /// capacitance
+  Real mCapacitancePerUnit;
   /// leakage impedance
   Complex mLeakagePerUnit;
   /// magnetizing impedance
   Complex mMagnetizingPerUnit;
-  /// transformer ratio
+  /// transformer tap ratio 
   Real mRatioAbsPerUnit;
+  /// transformer tap ratio + shift
+  Complex mRatioPerUnit;
 
   // #### Admittance matrix stamp ####
   MatrixComp mY_element;
@@ -123,13 +129,10 @@ public:
   SimPowerComp<Complex>::Ptr clone(String name) override;
 
   // #### General ####
-  /// Set transformer specific parameters (without rated power)
-  void setParameters(Real nomVoltageEnd1, Real nomVoltageEnd2, Real ratioAbs,
-                     Real ratioPhase, Real resistance, Real inductance);
   /// Set transformer specific parameters
   void setParameters(Real nomVoltageEnd1, Real nomVoltageEnd2, Real ratedPower,
                      Real ratioAbs, Real ratioPhase, Real resistance,
-                     Real inductance);
+                     Real inductance, Real capacitance=0, Real conductance=0);
   /// Initializes component from power flow data
   void initializeFromNodesAndTerminals(Real frequency) override;
 
