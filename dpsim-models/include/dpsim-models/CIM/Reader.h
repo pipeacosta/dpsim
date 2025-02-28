@@ -47,6 +47,8 @@ class ExternalNetworkInjection;
 class EnergyConsumer;
 class PowerTransformer;
 class EquivalentShunt;
+class LinearShuntCompensator;
+class StaticVarCompensator;
 class TopologicalNode;
 class ConductingEquipment;
 class Disconnector;
@@ -117,7 +119,7 @@ private:
   /// activates global shunt resistor setting
   Bool mSetShuntConductance = false;
   /// global shunt resistor value
-  Real mShuntConductanceValue = 1e-6;
+  Real mShuntConductanceValue = -1;
 
   // #### General Functions ####
   /// Resolves unit multipliers.
@@ -168,6 +170,8 @@ private:
   TopologicalPowerComp::Ptr mapEquivalentShunt(CIMPP::EquivalentShunt *shunt);
   TopologicalPowerComp::Ptr mapDisconnector(CIMPP::Disconnector *disc);
   TopologicalPowerComp::Ptr mapBreaker(CIMPP::Breaker *cb);
+  TopologicalPowerComp::Ptr mapLinearShuntCompensator(CIMPP::LinearShuntCompensator *shunt);
+  TopologicalPowerComp::Ptr mapStaticVarCompensator(CIMPP::StaticVarCompensator *svc);
 
   // #### Helper Functions ####
   /// Determine base voltage associated with object

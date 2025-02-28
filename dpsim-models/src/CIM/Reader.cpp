@@ -119,6 +119,12 @@ TopologicalPowerComp::Ptr Reader::mapComponent(BaseClass *obj) {
     return mapDisconnector(disc);
   if (CIMPP::Breaker *cb = dynamic_cast<CIMPP::Breaker *>(obj))
     return mapBreaker(cb);
+  if (CIMPP::LinearShuntCompensator *shunt =
+          dynamic_cast<CIMPP::LinearShuntCompensator *>(obj))
+    return mapLinearShuntCompensator(shunt);
+  if (CIMPP::StaticVarCompensator *svc =
+          dynamic_cast<CIMPP::StaticVarCompensator *>(obj))
+    return mapStaticVarCompensator(svc);
   return nullptr;
 }
 
@@ -353,19 +359,16 @@ Reader::mapEnergyConsumer(CIMPP::EnergyConsumer *consumer) {
                                                 mComponentLogLevel);
 
     // TODO: Use EnergyConsumer.P and EnergyConsumer.Q if available, overwrite if existent SvPowerFlow data
-
-		// Real p = 0;
-		// Real q = 0;
-		// if (consumer->p){
-		// 	p = unitValue(consumer->p,UnitMultiplier::M);
-		// }
-		// if (consumer->q){
-		// 	q = unitValue(consumer->q,UnitMultiplier::M);
-		// }
-
-    // Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
-		// load->setParameters(p, q, baseVoltage);
-
+    Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
+		Real p = 0;
+		Real q = 0;
+		if (consumer->p){
+			p = unitValue(consumer->p,UnitMultiplier::M);
+		}
+		if (consumer->q){
+			q = unitValue(consumer->q,UnitMultiplier::M);
+		}
+		load->setParameters(p, q, baseVoltage);
 
     // P and Q values will be set according to SvPowerFlow data
     load->modifyPowerFlowBusType(
@@ -517,12 +520,13 @@ Reader::mapPowerTransformer(CIMPP::PowerTransformer *trans) {
         "Using rated power of PowerTransformerEnd_1.",
         cimString(trans->name));
   }
-  Real ratedPower = unitValue(end1->ratedS.value, UnitMultiplier::M);
-  Real voltageNode1 = unitValue(end1->ratedU.value, UnitMultiplier::k);
-  Real voltageNode2 = unitValue(end2->ratedU.value, UnitMultiplier::k);
 
-  Real ratioAbsNominal = voltageNode1 / voltageNode2;
-  Real ratioAbs = ratioAbsNominal;
+  Real ratedPower = unitValue(end1->ratedS.value, UnitMultiplier::M);
+  Real voltageNode1 = unitValue(end1->BaseVoltage->nominalVoltage, UnitMultiplier::k);
+  Real voltageNode2 = unitValue(end2->BaseVoltage->nominalVoltage, UnitMultiplier::k);
+
+  Real ratioAbsNominal = unitValue(end1->BaseVoltage->nominalVoltage, UnitMultiplier::k)  / unitValue(end2->BaseVoltage->nominalVoltage, UnitMultiplier::k);
+  Real ratioAbs = unitValue(end1->ratedU.value, UnitMultiplier::k)  / unitValue(end2->ratedU.value, UnitMultiplier::k);
 
   // use normalStep from RatioTapChanger
   if (end1->RatioTapChanger) {
@@ -552,18 +556,24 @@ Reader::mapPowerTransformer(CIMPP::PowerTransformer *trans) {
   // Calculate resistance and inductance referred to higher voltage side
   Real resistance = 0;
   Real inductance = 0;
+  Real capacitance = 0;
+
   if (voltageNode1 >= voltageNode2 && abs(end1->x.value) > 1e-12) {
     inductance = end1->x.value / mOmega;
     resistance = end1->r.value;
+    capacitance = end1->b.value / mOmega;
   } else if (voltageNode1 >= voltageNode2 && abs(end2->x.value) > 1e-12) {
     inductance = end2->x.value / mOmega * std::pow(ratioAbsNominal, 2);
     resistance = end2->r.value * std::pow(ratioAbsNominal, 2);
+    capacitance = end2->b.value / mOmega * std::pow(ratioAbsNominal, 2);
   } else if (voltageNode2 > voltageNode1 && abs(end2->x.value) > 1e-12) {
     inductance = end2->x.value / mOmega;
     resistance = end2->r.value;
+    capacitance = end2->b.value / mOmega;
   } else if (voltageNode2 > voltageNode1 && abs(end1->x.value) > 1e-12) {
     inductance = end1->x.value / mOmega / std::pow(ratioAbsNominal, 2);
     resistance = end1->r.value / std::pow(ratioAbsNominal, 2);
+    capacitance = end1->b.value / mOmega / std::pow(ratioAbsNominal, 2);
   }
 
   if (mDomain == Domain::EMT) {
@@ -588,7 +598,7 @@ Reader::mapPowerTransformer(CIMPP::PowerTransformer *trans) {
     auto transformer = std::make_shared<SP::Ph1::Transformer>(
         transRid, cimString(trans->name), mComponentLogLevel);
     transformer->setParameters(voltageNode1, voltageNode2, ratedPower, ratioAbs,
-                               ratioPhase, resistance, inductance);
+                               ratioPhase, resistance, inductance, capacitance, 0);
     Real baseVolt = voltageNode1 >= voltageNode2 ? voltageNode1 : voltageNode2;
     transformer->setBaseVoltage(baseVolt);
     return transformer;
@@ -849,6 +859,8 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
         }
       }
     } else if (mGeneratorType == GeneratorType::PVNode) {
+      Bool isPQNode= false;
+      
       SPDLOG_LOGGER_DEBUG(mSLog, "    GeneratorType is PVNode.");
       for (auto obj : mModel->Objects) {
         if (CIMPP::GeneratingUnit *genUnit =
@@ -857,6 +869,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
             if (cimString(syncGen->mRID) == machineRid) {
               // Check whether relevant input data are set, otherwise set default values
               Real setPointActivePower = 0;
+              Real setPointReactivePower = 0;
               Real setPointVoltage = 0;
               Real maximumReactivePower = 1e12;
               try {
@@ -876,7 +889,9 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                               UnitMultiplier::k);
                 SPDLOG_LOGGER_INFO(mSLog, "    setPointVoltage={}",
                                    setPointVoltage);
-              } else {
+              } else { 
+                isPQNode=true;
+                setPointVoltage= unitValue(machine->ratedU.value, UnitMultiplier::k);
                 std::cerr << "Uninitalized setPointVoltage for GeneratingUnit "
                           << machineName << ". Using default value of "
                           << setPointVoltage << std::endl;
@@ -892,16 +907,63 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                     << machineName << ". Using default value of "
                     << maximumReactivePower << std::endl;
               }
-
-              auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
-                  machineRid, machineName, mComponentLogLevel);
-              gen->setParameters(
-                  unitValue(machine->ratedS.value, UnitMultiplier::M),
-                  unitValue(machine->ratedU.value, UnitMultiplier::k),
-                  setPointActivePower, setPointVoltage, PowerflowBusType::PV);
-              gen->setBaseVoltage(
-                  unitValue(machine->ratedU.value, UnitMultiplier::k));
-              return gen;
+              
+              // Map as PQ node
+              if (isPQNode) {
+                // auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
+                //   machine->mRID, machine->name, mComponentLogLevel);
+                //   gen->setParameters(
+                //   unitValue(machine->ratedS.value, UnitMultiplier::M),
+                //   unitValue(machine->ratedU.value, UnitMultiplier::k),
+                //   setPointActivePower, setPointVoltage, PowerflowBusType::PQ, setPointReactivePower);
+                //   // gen->modifyPowerFlowBusType(PowerflowBusType::PQ);
+                //   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
+                //   gen->setBaseVoltage(baseVoltage);
+                //   return gen;
+                  auto gen = std::make_shared<SP::Ph1::Load>(machine->mRID, machine->name, mComponentLogLevel);
+                  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
+                  gen->setParameters(-setPointActivePower, -setPointReactivePower, baseVoltage);
+                  // P and Q values will be set according to SvPowerFlow data
+                  gen->modifyPowerFlowBusType(PowerflowBusType::PQ); // for powerflow solver set as PQ component as default
+                  return gen;
+                }
+              else {
+               // Map as VD node
+                if (machine->referencePriority)
+                {
+                    Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
+                      //   auto gen = std::make_shared<SP::Ph1::NetworkInjection>(
+                      //       machine->mRID, machine->name, mComponentLogLevel);
+                      //   gen->modifyPowerFlowBusType(
+                      //       PowerflowBusType::
+                      //           VD); // for powerflow solver set as VD component as default
+                      //   gen->setParameters(baseVoltage);
+                      //   gen->setBaseVoltage(baseVoltage);
+                      // return gen;
+                  auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
+                    machine->mRID, machine->name, mComponentLogLevel);
+                  gen->setParameters(
+                    unitValue(machine->ratedS.value, UnitMultiplier::M),
+                    unitValue(machine->ratedU.value, UnitMultiplier::k),
+                    setPointActivePower, setPointVoltage, PowerflowBusType::VD);
+                  gen->setBaseVoltage(baseVoltage);
+                  return gen;
+                }
+                // Map as PV node
+                else {
+                  auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
+                    machineRid, machineName, mComponentLogLevel);
+                  gen->setParameters(
+                    unitValue(machine->ratedS.value, UnitMultiplier::M),
+                    unitValue(machine->ratedU.value, UnitMultiplier::k),
+                    setPointActivePower, setPointVoltage, PowerflowBusType::PV);
+                  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
+                  gen->setBaseVoltage(baseVoltage);
+                  // gen->setBaseVoltage(
+                  //   unitValue(machine->ratedU.value, UnitMultiplier::k));
+                  return gen;
+                }
+              }
             }
           }
         }
@@ -1249,6 +1311,55 @@ Reader::mapBreaker(CIMPP::Breaker *cb) {
 
 }
 
+TopologicalPowerComp::Ptr
+Reader::mapLinearShuntCompensator(CIMPP::LinearShuntCompensator *shunt) {
+  SPDLOG_LOGGER_INFO(mSLog, "Found shunt {}", shunt->name);
+
+  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(shunt);
+
+  // auto cpsShunt = std::make_shared<SP::Ph1::Shunt>(shunt->mRID, shunt->name,
+  //                                                  mComponentLogLevel);
+  // cpsShunt->setParameters(shunt->gPerSection.value * shunt->normalSections.value, shunt->bPerSection.value *shunt->normalSections.value);
+  // cpsShunt->setBaseVoltage(baseVoltage);
+  // return cpsShunt;
+
+ 
+  auto cpsShunt = std::make_shared<SP::Ph1::Load>(shunt->mRID, shunt->name, mComponentLogLevel);
+  Real pShunt= -shunt->gPerSection.value* shunt->normalSections.value  * std::pow(baseVoltage, 2);
+  Real qShunt= -shunt->bPerSection.value* shunt->normalSections.value  * std::pow(baseVoltage, 2);
+  cpsShunt->setParameters(pShunt, qShunt, baseVoltage);
+
+  // P and Q values will be set according to SvPowerFlow data
+  cpsShunt->modifyPowerFlowBusType(PowerflowBusType::PQ); // for powerflow solver set as PQ component as default
+  return cpsShunt;
+}
+
+TopologicalPowerComp::Ptr
+Reader::mapStaticVarCompensator(CIMPP::StaticVarCompensator *svc) {
+  SPDLOG_LOGGER_INFO(mSLog, "Found static var compensator {}", svc->name);
+
+  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(svc);
+
+  // auto cpsShunt = std::make_shared<SP::Ph1::Shunt>(svc->mRID, svc->name,
+  //                                                  mComponentLogLevel);
+
+  // Real gShunt= 0;
+  // Real bShunt= - unitValue(svc->q, UnitMultiplier::M)  / std::pow(baseVoltage, 2);
+  // cpsShunt->setParameters(gShunt, bShunt);
+  // cpsShunt->setBaseVoltage(baseVoltage);
+  // return cpsShunt;
+
+  
+  auto cpsShunt = std::make_shared<SP::Ph1::Load>(svc->mRID, svc->name, mComponentLogLevel);
+  Real pShunt= 0;
+  Real qShunt= unitValue(svc->q, UnitMultiplier::M);
+  cpsShunt->setParameters(pShunt, qShunt, baseVoltage);
+
+  // P and Q values will be set according to SvPowerFlow data
+  cpsShunt->modifyPowerFlowBusType(PowerflowBusType::PQ); // for powerflow solver set as PQ component as default
+  return cpsShunt;
+}
+
 Real Reader::determineBaseVoltageAssociatedWithEquipment(
     CIMPP::ConductingEquipment *equipment) {
   Real baseVoltage = 0;
@@ -1307,6 +1418,9 @@ void Reader::processTopologicalNode(CIMPP::TopologicalNode *topNode) {
                        "TopologicalNode id: {}, name: {} as simulation node {}",
                        nodeRid, cimString(topNode->name),
                        mPowerflowNodes[nodeRid]->matrixNodeIndex());
+  
+  Real baseVolt = unitValue(topNode->BaseVoltage->nominalVoltage.value, UnitMultiplier::k);
+  mPowerflowNodes[topNode->mRID]->setBaseVoltage(baseVolt);
 
   for (auto term : topNode->Terminal) {
     // Insert Terminal if it does not exist in the map and add reference to node.
