@@ -39,6 +39,10 @@ public:
   /// Power injected at node
   const typename Attribute<MatrixVar<VarType>>::Ptr mApparentPower;
 
+  // #### Powerflow section ####
+  /// Base voltage [V]
+  const Attribute<Real>::Ptr mBaseVoltage;
+
   /// This very general constructor is used by other constructors.
   SimNode(String uid, String name, std::vector<UInt> matrixNodeIndex,
           PhaseType phaseType, const std::vector<Complex> &initialVoltage);
@@ -63,6 +67,10 @@ public:
       : SimNode("N" + std::to_string(matrixNodeIndex),
                 "N" + std::to_string(matrixNodeIndex), matrixNodeIndex,
                 phaseType) {}
+
+
+  /// Set base voltage for Powerflow
+  void setBaseVoltage(Real baseVoltage) override;
 
   /// Initialize mVoltage according to mInitialVoltage
   void initialize();

@@ -27,11 +27,8 @@ public:
   const Attribute<Real>::Ptr mConductancePerUnit;
   /// Susceptance [pu]
   const Attribute<Real>::Ptr mSusceptancePerUnit;
-
-private:
   /// Base voltage [V]
-  Real mBaseVoltage;
-
+  const Attribute<Real>::Ptr mBaseVoltage;
 public:
   /// Defines UID, name, component parameters and logging level
   Shunt(String uid, String name, Logger::Level logLevel = Logger::Level::off);

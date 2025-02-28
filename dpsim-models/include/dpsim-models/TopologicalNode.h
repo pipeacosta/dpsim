@@ -52,5 +52,7 @@ public:
   virtual std::vector<UInt> matrixNodeIndices() = 0;
   ///
   virtual void setMatrixNodeIndex(UInt phase, UInt matrixNodeIndex) = 0;
+
+  virtual void setBaseVoltage(Real baseVoltage)=0;
 };
 } // namespace CPS
