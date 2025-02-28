@@ -54,9 +54,9 @@ void SP::Ph1::PiLine::setParameters(Real resistance, Real inductance,
       **mParallelCond =
           (conductance >= 0)
               ? conductance
-              : 1e-6; // init mode for initFromPowerFlow of mna system components
+              : 1e-12; // init mode for initFromPowerFlow of mna system components
     else
-      **mParallelCond = (conductance > 0) ? conductance : 1e-6;
+      **mParallelCond = (conductance > 0) ? conductance : 1e-12;
     SPDLOG_LOGGER_WARN(
         mSLog, "Zero value for Conductance, setting default value of G={} [S]",
         **mParallelCond);
