@@ -456,11 +456,11 @@ class Reader:
                 dpsimpy_comp_dict[transf_name][0].set_parameters(
                     transf_primary_v,
                     transf_secondary_v,
-                    np.abs(transf_ratio),
+                    transf_s, np.abs(transf_ratio),
                     np.angle(transf_ratio),
                     transf_r,
                     transf_l,
-                , transf_c)
+                , transf_c, 0.0)
                 dpsimpy_comp_dict[transf_name][0].set_base_voltage(transf_tbus_baseV)
 
                 print(
