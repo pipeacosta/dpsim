@@ -115,7 +115,10 @@ TopologicalPowerComp::Ptr Reader::mapComponent(BaseClass *obj) {
   if (CIMPP::EquivalentShunt *shunt =
           dynamic_cast<CIMPP::EquivalentShunt *>(obj))
     return mapEquivalentShunt(shunt);
-
+  if (CIMPP::Disconnector *disc = dynamic_cast<CIMPP::Disconnector *>(obj))
+    return mapDisconnector(disc);
+  if (CIMPP::Breaker *cb = dynamic_cast<CIMPP::Breaker *>(obj))
+    return mapBreaker(cb);
   return nullptr;
 }
 
@@ -348,6 +351,21 @@ Reader::mapEnergyConsumer(CIMPP::EnergyConsumer *consumer) {
   } else if (mDomain == Domain::SP) {
     auto load = std::make_shared<SP::Ph1::Load>(consumerRid, consumerName,
                                                 mComponentLogLevel);
+
+    // TODO: Use EnergyConsumer.P and EnergyConsumer.Q if available, overwrite if existent SvPowerFlow data
+
+		Real p = 0;
+		Real q = 0;
+		if (consumer->p){
+			p = unitValue(consumer->p,UnitMultiplier::M);
+		}
+		if (consumer->q){
+			q = unitValue(consumer->q,UnitMultiplier::M);
+		}
+
+    Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
+		load->setParameters(p, q, baseVoltage);
+
 
     // P and Q values will be set according to SvPowerFlow data
     load->modifyPowerFlowBusType(
@@ -1101,6 +1119,137 @@ Reader::mapEquivalentShunt(CIMPP::EquivalentShunt *shunt) {
   return cpsShunt;
 }
 
+TopologicalPowerComp::Ptr
+Reader::mapDisconnector(CIMPP::Disconnector *disc) {
+
+ SPDLOG_LOGGER_INFO(mSLog, "Found Disconnector {} with status {}", disc->name,
+                      (bool)disc->open.value);
+
+std::cout<< disc->open.value << std::endl;
+
+  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(disc);
+  Real resistance = 0;
+  Real inductance = 0;
+  Real capacitance = 0;
+  Real conductance = 0;
+
+ Bool status = disc->open.value;
+ if (status == true){
+
+  resistance = 1e9;
+  inductance = 1e9;
+  capacitance = 10^(-20);
+  conductance = 10^(-20);
+
+ } else {
+
+  resistance = 10^(-20);
+  inductance = 10^(-20);
+  capacitance = 1e9;
+  conductance = 1e9;
+
+ }
+
+
+ if (mDomain == Domain::EMT) {
+  if (mPhase == PhaseType::ABC) {
+      Matrix res_3ph = CPS::Math::singlePhaseParameterToThreePhase(resistance);
+      Matrix ind_3ph = CPS::Math::singlePhaseParameterToThreePhase(inductance);
+      Matrix cap_3ph = CPS::Math::singlePhaseParameterToThreePhase(capacitance);
+      Matrix cond_3ph =
+          CPS::Math::singlePhaseParameterToThreePhase(conductance);
+
+      auto cpsLine = std::make_shared<EMT::Ph3::PiLine>(disc->mRID, disc->name,
+                                                        mComponentLogLevel);
+      cpsLine->setParameters(res_3ph, ind_3ph, cap_3ph, cond_3ph);
+      return cpsLine;
+    } else {
+      SPDLOG_LOGGER_INFO(mSLog, "    PiLine for EMT not implemented yet");
+      auto cpsLine = std::make_shared<DP::Ph1::PiLine>(disc->mRID, disc->name,
+                                                       mComponentLogLevel);
+      cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+      return cpsLine;
+    }
+ } else if (mDomain == Domain::SP) {
+    auto cpsLine = std::make_shared<SP::Ph1::PiLine>(disc->mRID, disc->name,
+                                                     mComponentLogLevel);
+    cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+    cpsLine->setBaseVoltage(baseVoltage);
+    return cpsLine;
+  } else {
+    auto cpsLine = std::make_shared<DP::Ph1::PiLine>(disc->mRID, disc->name,
+                                                     mComponentLogLevel);
+    cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+    return cpsLine;
+  }
+}
+
+TopologicalPowerComp::Ptr
+Reader::mapBreaker(CIMPP::Breaker *cb) {
+  SPDLOG_LOGGER_INFO(mSLog,
+                    "Found Breaker {} with status {}",
+                    cb->name,
+                    (bool)cb->open.value);
+
+  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(cb);
+
+  Real resistance = 0;
+  Real inductance = 0;
+  Real capacitance = 0;
+  Real conductance = 0;
+
+  Bool status = cb->open.value;
+
+ if (status == true){
+
+  resistance = 1e9;
+  inductance = 1e9;
+  capacitance = 10^(-10);
+  conductance = 10^(-10);
+
+ } else {
+
+  resistance = 10^(-10);
+  inductance = 10^(-10);
+  capacitance = 1e9;
+  conductance = 1e9;
+
+ }
+
+ if (mDomain == Domain::EMT) {
+  if (mPhase == PhaseType::ABC) {
+      Matrix res_3ph = CPS::Math::singlePhaseParameterToThreePhase(resistance);
+      Matrix ind_3ph = CPS::Math::singlePhaseParameterToThreePhase(inductance);
+      Matrix cap_3ph = CPS::Math::singlePhaseParameterToThreePhase(capacitance);
+      Matrix cond_3ph =
+          CPS::Math::singlePhaseParameterToThreePhase(conductance);
+
+      auto cpsLine = std::make_shared<EMT::Ph3::PiLine>(cb->mRID, cb->name,
+                                                        mComponentLogLevel);
+      cpsLine->setParameters(res_3ph, ind_3ph, cap_3ph, cond_3ph);
+      return cpsLine;
+    } else {
+      SPDLOG_LOGGER_INFO(mSLog, "    PiLine for EMT not implemented yet");
+      auto cpsLine = std::make_shared<DP::Ph1::PiLine>(cb->mRID, cb->name,
+                                                       mComponentLogLevel);
+      cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+      return cpsLine;
+    }
+ } else if (mDomain == Domain::SP) {
+    auto cpsLine = std::make_shared<SP::Ph1::PiLine>(cb->mRID, cb->name,
+                                                     mComponentLogLevel);
+    cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+    cpsLine->setBaseVoltage(baseVoltage);
+    return cpsLine;
+  } else {
+    auto cpsLine = std::make_shared<DP::Ph1::PiLine>(cb->mRID, cb->name,
+                                                     mComponentLogLevel);
+    cpsLine->setParameters(resistance, inductance, capacitance, conductance);
+    return cpsLine;
+  }
+
+}
+
 Real Reader::determineBaseVoltageAssociatedWithEquipment(
     CIMPP::ConductingEquipment *equipment) {
   Real baseVoltage = 0;
@@ -1210,6 +1359,8 @@ void Reader::processTopologicalNode(CIMPP::TopologicalNode *topNode) {
     }
   }
 }
+
+
 
 template void
 Reader::processTopologicalNode<Real>(CIMPP::TopologicalNode *topNode);
