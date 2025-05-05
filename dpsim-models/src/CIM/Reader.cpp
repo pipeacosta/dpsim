@@ -890,7 +890,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                 SPDLOG_LOGGER_INFO(mSLog, "    setPointVoltage={}",
                                    setPointVoltage);
               } else { 
-                isPQNode=true;
+                // isPQNode=true;
                 setPointVoltage= unitValue(machine->ratedU.value, UnitMultiplier::k);
                 std::cerr << "Uninitalized setPointVoltage for GeneratingUnit "
                           << machineName << ". Using default value of "
@@ -1138,9 +1138,10 @@ Reader::mapExternalNetworkInjection(CIMPP::ExternalNetworkInjection *extnet) {
         if (extnet->RegulatingControl) {
           SPDLOG_LOGGER_INFO(mSLog, "       Voltage set-point={}",
                              (float)extnet->RegulatingControl->targetValue);
-          cpsextnet->setParameters(
-              extnet->RegulatingControl->targetValue *
-              baseVoltage); // assumes that value is specified in CIM data in per unit
+          // cpsextnet->setParameters(
+          //     extnet->RegulatingControl->targetValue *
+          //     baseVoltage); // assumes that value is specified in CIM data in per unit
+          cpsextnet->setParameters(unitValue(extnet->RegulatingControl->targetValue, UnitMultiplier::k)); // assumes that value is specified in CIM data in SI
         } else {
           SPDLOG_LOGGER_INFO(
               mSLog, "       No voltage set-point defined. Using 1 per unit.");
