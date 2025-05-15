@@ -522,11 +522,11 @@ Reader::mapPowerTransformer(CIMPP::PowerTransformer *trans) {
   }
 
   Real ratedPower = unitValue(end1->ratedS.value, UnitMultiplier::M);
-  Real voltageNode1 = unitValue(end1->BaseVoltage->nominalVoltage, UnitMultiplier::k);
-  Real voltageNode2 = unitValue(end2->BaseVoltage->nominalVoltage, UnitMultiplier::k);
+  Real voltageNode1 = unitValue(end1->ratedU.value, UnitMultiplier::k);
+  Real voltageNode2 = unitValue(end2->ratedU.value, UnitMultiplier::k);
 
-  Real ratioAbsNominal = unitValue(end1->BaseVoltage->nominalVoltage, UnitMultiplier::k)  / unitValue(end2->BaseVoltage->nominalVoltage, UnitMultiplier::k);
-  Real ratioAbs = unitValue(end1->ratedU.value, UnitMultiplier::k)  / unitValue(end2->ratedU.value, UnitMultiplier::k);
+  Real ratioAbsNominal = voltageNode1 / voltageNode2;
+  Real ratioAbs = ratioAbsNominal;
 
   // use normalStep from RatioTapChanger
   if (end1->RatioTapChanger) {
@@ -890,11 +890,13 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                 SPDLOG_LOGGER_INFO(mSLog, "    setPointVoltage={}",
                                    setPointVoltage);
               } else { 
-                // isPQNode=true;
+                isPQNode=true;
                 setPointVoltage= unitValue(machine->ratedU.value, UnitMultiplier::k);
                 std::cerr << "Uninitalized setPointVoltage for GeneratingUnit "
                           << machineName << ". Using default value of "
                           << setPointVoltage << std::endl;
+                setPointActivePower= unitValue(machine->p, UnitMultiplier::M);
+                setPointReactivePower= unitValue(machine->q, UnitMultiplier::M);
               }
               try {
                 maximumReactivePower =
@@ -908,38 +910,19 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                     << maximumReactivePower << std::endl;
               }
               
-              // Map as PQ node
+              // Map static generators (PQ) as loads with negative PQ values
               if (isPQNode) {
-                // auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
-                //   machine->mRID, machine->name, mComponentLogLevel);
-                //   gen->setParameters(
-                //   unitValue(machine->ratedS.value, UnitMultiplier::M),
-                //   unitValue(machine->ratedU.value, UnitMultiplier::k),
-                //   setPointActivePower, setPointVoltage, PowerflowBusType::PQ, setPointReactivePower);
-                //   // gen->modifyPowerFlowBusType(PowerflowBusType::PQ);
-                //   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
-                //   gen->setBaseVoltage(baseVoltage);
-                //   return gen;
                   auto gen = std::make_shared<SP::Ph1::Load>(machine->mRID, machine->name, mComponentLogLevel);
                   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
-                  gen->setParameters(-setPointActivePower, -setPointReactivePower, baseVoltage);
-                  // P and Q values will be set according to SvPowerFlow data
-                  gen->modifyPowerFlowBusType(PowerflowBusType::PQ); // for powerflow solver set as PQ component as default
+                  gen->setParameters(setPointActivePower, setPointReactivePower, baseVoltage);
+                  gen->modifyPowerFlowBusType(PowerflowBusType::PQ);
                   return gen;
                 }
               else {
-               // Map as VD node
+               // Map reference generators as VD node
                 if (machine->referencePriority)
                 {
-                    Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
-                      //   auto gen = std::make_shared<SP::Ph1::NetworkInjection>(
-                      //       machine->mRID, machine->name, mComponentLogLevel);
-                      //   gen->modifyPowerFlowBusType(
-                      //       PowerflowBusType::
-                      //           VD); // for powerflow solver set as VD component as default
-                      //   gen->setParameters(baseVoltage);
-                      //   gen->setBaseVoltage(baseVoltage);
-                      // return gen;
+                  Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
                   auto gen = std::make_shared<SP::Ph1::SynchronGenerator>(
                     machine->mRID, machine->name, mComponentLogLevel);
                   gen->setParameters(
@@ -959,8 +942,6 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                     setPointActivePower, setPointVoltage, PowerflowBusType::PV);
                   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(machine);
                   gen->setBaseVoltage(baseVoltage);
-                  // gen->setBaseVoltage(
-                  //   unitValue(machine->ratedU.value, UnitMultiplier::k));
                   return gen;
                 }
               }
