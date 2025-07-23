@@ -51,7 +51,7 @@ void DecouplingIdealTransformer_EMT_Ph3::setParameters(SimNode<Real>::Ptr node1,
   mCurrent1Extrap0 = current1Extrap0;
   mVoltageSrc->connect({SimNode<Real>::GND, node1});
   mCurrentSrc->setParameters(Matrix::Zero(3,1));
-  mCurrentSrc->connect({SimNode<Real>::GND, node2});
+  mCurrentSrc->connect({node2, SimNode<Real>::GND});
 }
 
 void DecouplingIdealTransformer_EMT_Ph3::initialize(Real omega, Real timeStep) {
