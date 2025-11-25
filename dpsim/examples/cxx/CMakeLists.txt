@@ -99,6 +99,7 @@ set(CIRCUIT_SOURCES
 	# KRK Two Area System
 	Circuits/SP_SynGenTrStab_KRK_TwoArea_SteadyState.cpp
 	Circuits/SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState.cpp
+	Circuits/SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState_split_ITM.cpp
 )
 
 if(WITH_JSON)
