@@ -158,7 +158,7 @@ void SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState(String simName, Real timeStep,
 	Real voltageMVSide = KRK_TwoArea.nomPhPhVoltRMS_G1;
 	Real voltageHVSide = KRK_TwoArea.Vnom;
 	Real ratio = voltageMVSide / voltageHVSide;
-	Real trafoResistance = 0;
+	Real trafoResistance = 1e-6;
 	Real trafoInductance = 23.4e-3; //set base to V_end2
 	Real trafoPower = 900e6;
 	// Note: to be consistent impedance values must be referred to high voltage side (and base voltage set to higher voltage)
@@ -471,18 +471,22 @@ void SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState(String simName, Real timeStep,
 	loggerSP->logAttribute("i_line910", line910SP->attribute("i_intf"));
 	loggerSP->logAttribute("v_line1011", line1011SP->attribute("v_intf"));
 	loggerSP->logAttribute("i_line1011", line1011SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_gen1", gen1SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_gen1", gen1SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_gen2", gen2SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_gen2", gen2SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_gen3", gen3SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_gen3", gen3SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_gen4", gen4SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_gen4", gen4SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_load7", load7SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_load7", load7SP->attribute("i_intf"));
-	loggerSP->logAttribute("v_load9", load9SP->attribute("v_intf"));
-	loggerSP->logAttribute("i_load9", load9SP->attribute("i_intf"));
+  loggerSP->logAttribute("v_gen1", gen1SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_gen1", gen1SP->attribute("i_intf"));
+  loggerSP->logAttribute("wr_gen1", gen1SP->attribute("w_r"));
+  loggerSP->logAttribute("v_gen2", gen2SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_gen2", gen2SP->attribute("i_intf"));
+  loggerSP->logAttribute("wr_gen2", gen2SP->attribute("w_r"));
+  loggerSP->logAttribute("v_gen3", gen3SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_gen3", gen3SP->attribute("i_intf"));
+  loggerSP->logAttribute("wr_gen3", gen3SP->attribute("w_r"));
+  loggerSP->logAttribute("v_gen4", gen4SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_gen4", gen4SP->attribute("i_intf"));
+  loggerSP->logAttribute("wr_gen4", gen4SP->attribute("w_r"));
+  loggerSP->logAttribute("v_load7", load7SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_load7", load7SP->attribute("i_intf"));
+  loggerSP->logAttribute("v_load9", load9SP->attribute("v_intf"));
+  loggerSP->logAttribute("i_load9", load9SP->attribute("i_intf"));
 
 	// trafo
 	loggerSP->logAttribute("i_trafo15", trafo15SP->attribute("i_intf"));
@@ -495,8 +499,8 @@ void SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState(String simName, Real timeStep,
 	loggerSP->logAttribute("v_trafo410", trafo410SP->attribute("v_intf"));
 
 	auto itm = systemSP.component<Signal::DecouplingIdealTransformer_SP_Ph1>("itm_n8");
-	loggerSP->logAttribute("v_itm", itm->attribute("v_ref"));
-	loggerSP->logAttribute("i_itm", itm->attribute("i_ref"));
+	loggerSP->logAttribute("v_intf_itm", itm->attribute("v_intf"));
+	loggerSP->logAttribute("i_intf_itm", itm->attribute("i_intf"));
 
 	Simulation simSP(simNameSP, Logger::Level::debug);
 	simSP.setSystem(systemSP);
@@ -504,7 +508,7 @@ void SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState(String simName, Real timeStep,
 	simSP.setFinalTime(finalTime);
 	simSP.setDomain(Domain::SP);
 	simSP.doSplitSubnets(true);
-  	simSP.doInitFromNodesAndTerminals(true);
+  simSP.doInitFromNodesAndTerminals(true);
 	simSP.addLogger(loggerSP);
 
 	simSP.run();

@@ -93,7 +93,7 @@ void SP_SynGenTrStab_KRK_TwoAreaTrafo_SteadyState(
   Real voltageMVSide = KRK_TwoArea.nomPhPhVoltRMS_G1;
   Real voltageHVSide = KRK_TwoArea.Vnom;
   Real ratio = voltageMVSide / voltageHVSide;
-  Real trafoResistance = 0;
+  Real trafoResistance = 1e-6;
   Real trafoInductance = 23.4e-3; //set base to V_end2
   Real trafoPower = 900e6;
 
