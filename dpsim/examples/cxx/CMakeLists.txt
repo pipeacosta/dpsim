@@ -180,7 +180,6 @@ if(WITH_CIM)
 		CIM/EMT_WSCC-9bus_FullOrderSG.cpp
 		CIM/EMT_WSCC-9bus_VBR.cpp
 		CIM/DP_WSCC-9bus_IdealVS.cpp
-		CIM/SEGURO.cpp
 
 		# WSCC Reduced Order
 		CIM/SP_WSCC9bus_SGReducedOrderVBR.cpp
@@ -210,6 +209,8 @@ if(WITH_CIM)
 		CIM/EMT_CIGRE_MV_withoutDG.cpp
 		CIM/EMT_CIGRE_MV_withDG.cpp
 		CIM/EMT_CIGRE_MV_withDG_withLoadStep.cpp
+
+		CIM/DP_SWW_Wunsiedel.cpp
 	)
 
 	list(APPEND TEST_SOURCES
