@@ -354,17 +354,17 @@ Reader::mapEnergyConsumer(CIMPP::EnergyConsumer *consumer) {
 
     // TODO: Use EnergyConsumer.P and EnergyConsumer.Q if available, overwrite if existent SvPowerFlow data
 
-		Real p = 0;
-		Real q = 0;
-		if (consumer->p){
-			p = unitValue(consumer->p,UnitMultiplier::M);
-		}
-		if (consumer->q){
-			q = unitValue(consumer->q,UnitMultiplier::M);
-		}
+		// Real p = 0;
+		// Real q = 0;
+		// if (consumer->p){
+		// 	p = unitValue(consumer->p,UnitMultiplier::M);
+		// }
+		// if (consumer->q){
+		// 	q = unitValue(consumer->q,UnitMultiplier::M);
+		// }
 
-    Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
-		load->setParameters(p, q, baseVoltage);
+    // Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
+		// load->setParameters(p, q, baseVoltage);
 
 
     // P and Q values will be set according to SvPowerFlow data
@@ -1122,8 +1122,7 @@ Reader::mapEquivalentShunt(CIMPP::EquivalentShunt *shunt) {
 TopologicalPowerComp::Ptr
 Reader::mapDisconnector(CIMPP::Disconnector *disc) {
 
- SPDLOG_LOGGER_INFO(mSLog, "Found Disconnector {} with status {}", disc->name,
-                      (bool)disc->open.value);
+SPDLOG_LOGGER_INFO(mSLog, "Found Disconnector {} with status {}", cimString(disc->name), (bool)disc->open.value);
 
 std::cout<< disc->open.value << std::endl;
 
@@ -1188,7 +1187,7 @@ TopologicalPowerComp::Ptr
 Reader::mapBreaker(CIMPP::Breaker *cb) {
   SPDLOG_LOGGER_INFO(mSLog,
                     "Found Breaker {} with status {}",
-                    cb->name,
+                    cimString(cb->name),
                     (bool)cb->open.value);
 
   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(cb);
