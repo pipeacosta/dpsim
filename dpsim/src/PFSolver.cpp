@@ -186,7 +186,6 @@ void PFSolver::determinePFBusType() {
     // only PQ type component connected -> set as PQ bus
     if (!connectedPV && connectedPQ && !connectedVD) {
       SPDLOG_LOGGER_INFO(
-      SPDLOG_LOGGER_INFO(
           mSLog, "{}: only PQ type component connected -> set as PQ bus",
           node->name());
       mPQBusIndices.push_back(node->matrixNodeIndex());
@@ -273,7 +272,7 @@ void PFSolver::determineNodeBaseVoltages() {
       baseVoltage_= node->attributeTyped<CPS::Real>("base_Voltage")->get();
       SPDLOG_LOGGER_INFO(mSLog, "Choose set base voltage {}V to convert pu-solution of {}.",
             baseVoltage_,  node->name());
-    } 
+    }
     //else retrieve from connected components
     else {
     SPDLOG_LOGGER_INFO(mSLog, "-- Determine base voltage for node {} "

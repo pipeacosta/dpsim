@@ -70,7 +70,7 @@ void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
 /// DEPRECATED: Delete method
 SimPowerComp<Complex>::Ptr SP::Ph1::Transformer::clone(String name) {
   auto copy = Transformer::make(name, mLogLevel);
-  copy->setParameters(**mNominalVoltageEnd1, **mNominalVoltageEnd2,
+  copy->setParameters(mNominalVoltageEnd1, mNominalVoltageEnd2,
                       **mRatedPower, std::abs(**mRatio), std::arg(**mRatio),
                       **mResistance, **mInductance, **mCapacitance, **mConductance );
   return copy;
@@ -263,11 +263,11 @@ void SP::Ph1::Transformer::calculatePerUnitParameters(Real baseApparentPower,
   // omega per unit=1, hence 1.0*mInductancePerUnit.
   mLeakagePerUnit = Complex(mResistancePerUnit, 1. * mInductancePerUnit);
   SPDLOG_LOGGER_INFO(mSLog, "Leakage Impedance={} [pu] ", mLeakagePerUnit);
-  
+
   mBaseCapacitance = 1.0 / mBaseOmega / mBaseImpedance;
   mCapacitancePerUnit = **mCapacitance / mBaseCapacitance;
 
-  mRatioAbsPerUnit = mRatioAbs / **mNominalVoltageEnd1 * **mNominalVoltageEnd2;
+  mRatioAbsPerUnit = mRatioAbs / mNominalVoltageEnd1 * mNominalVoltageEnd2;
   SPDLOG_LOGGER_INFO(mSLog, "Tap Ratio={} [pu]", mRatioAbsPerUnit);
 
   // Calculate per unit parameters of subcomps

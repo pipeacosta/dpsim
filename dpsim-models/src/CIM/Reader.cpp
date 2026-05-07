@@ -860,7 +860,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
       }
     } else if (mGeneratorType == GeneratorType::PVNode) {
       Bool isPQNode= false;
-      
+
       SPDLOG_LOGGER_DEBUG(mSLog, "    GeneratorType is PVNode.");
       for (auto obj : mModel->Objects) {
         if (CIMPP::GeneratingUnit *genUnit =
@@ -889,7 +889,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                               UnitMultiplier::k);
                 SPDLOG_LOGGER_INFO(mSLog, "    setPointVoltage={}",
                                    setPointVoltage);
-              } else { 
+              } else {
                 isPQNode=true;
                 setPointVoltage= unitValue(machine->ratedU.value, UnitMultiplier::k);
                 std::cerr << "Uninitalized setPointVoltage for GeneratingUnit "
@@ -909,7 +909,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                     << machineName << ". Using default value of "
                     << maximumReactivePower << std::endl;
               }
-              
+
               // Map static generators (PQ) as loads with negative PQ values
               if (isPQNode) {
                   auto gen = std::make_shared<SP::Ph1::Load>(machine->mRID, machine->name, mComponentLogLevel);
@@ -1295,7 +1295,7 @@ Reader::mapBreaker(CIMPP::Breaker *cb) {
 
 TopologicalPowerComp::Ptr
 Reader::mapLinearShuntCompensator(CIMPP::LinearShuntCompensator *shunt) {
-  SPDLOG_LOGGER_INFO(mSLog, "Found shunt {}", shunt->name);
+  SPDLOG_LOGGER_INFO(mSLog, "Found shunt {}", cimString(shunt->name));
 
   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(shunt);
 
@@ -1305,7 +1305,7 @@ Reader::mapLinearShuntCompensator(CIMPP::LinearShuntCompensator *shunt) {
   // cpsShunt->setBaseVoltage(baseVoltage);
   // return cpsShunt;
 
- 
+
   auto cpsShunt = std::make_shared<SP::Ph1::Load>(shunt->mRID, shunt->name, mComponentLogLevel);
   Real pShunt= -shunt->gPerSection.value* shunt->normalSections.value  * std::pow(baseVoltage, 2);
   Real qShunt= -shunt->bPerSection.value* shunt->normalSections.value  * std::pow(baseVoltage, 2);
@@ -1318,7 +1318,7 @@ Reader::mapLinearShuntCompensator(CIMPP::LinearShuntCompensator *shunt) {
 
 TopologicalPowerComp::Ptr
 Reader::mapStaticVarCompensator(CIMPP::StaticVarCompensator *svc) {
-  SPDLOG_LOGGER_INFO(mSLog, "Found static var compensator {}", svc->name);
+  SPDLOG_LOGGER_INFO(mSLog, "Found static var compensator {}", cimString(svc->name));
 
   Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(svc);
 
@@ -1331,7 +1331,7 @@ Reader::mapStaticVarCompensator(CIMPP::StaticVarCompensator *svc) {
   // cpsShunt->setBaseVoltage(baseVoltage);
   // return cpsShunt;
 
-  
+
   auto cpsShunt = std::make_shared<SP::Ph1::Load>(svc->mRID, svc->name, mComponentLogLevel);
   Real pShunt= 0;
   Real qShunt= unitValue(svc->q, UnitMultiplier::M);
@@ -1400,7 +1400,7 @@ void Reader::processTopologicalNode(CIMPP::TopologicalNode *topNode) {
                        "TopologicalNode id: {}, name: {} as simulation node {}",
                        nodeRid, cimString(topNode->name),
                        mPowerflowNodes[nodeRid]->matrixNodeIndex());
-  
+
   Real baseVolt = unitValue(topNode->BaseVoltage->nominalVoltage.value, UnitMultiplier::k);
   mPowerflowNodes[topNode->mRID]->setBaseVoltage(baseVolt);
 

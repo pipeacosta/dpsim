@@ -46,8 +46,8 @@ public:
   ///
   void setParameters(Real nomVoltageEnd1, Real nomVoltageEnd2, Real ratioAbs,
                      Real ratioPhase, Real resistance, Real inductance, Real capacitance=0, Real conductance=0) {
-    **mNominalVoltageEnd1 = nomVoltageEnd1;
-    **mNominalVoltageEnd2 = nomVoltageEnd2;
+    mNominalVoltageEnd1 = nomVoltageEnd1;
+    mNominalVoltageEnd2 = nomVoltageEnd2;
     **mRatio = std::polar<Real>(ratioAbs, ratioPhase);
     **mResistance = resistance;
     **mInductance = inductance;
