@@ -391,25 +391,14 @@ class Reader:
 
                 ### PQ GENERATORS ###
                 if self.mpc_bus_data.at[index,'bus_i'] in self.mpc_gen_data['bus'].values:
-                    generator = generator + 1
-                    gen_name = "gen%s" %generator
-
-                    # relevant data from self.mpc_gen_data. Identification with bus number available in mpc_bus_data and mpc_gen_data
-                    gen = self.mpc_gen_data.loc[self.mpc_gen_data['bus'] == self.mpc_bus_data.at[index,'bus_i']]
-
-                    gen_baseS = gen['mBase']*mw_w # gen base MVA default is mpc.baseMVA
-                    gen_baseV = self.mpc_bus_data.at[index,'baseKV']*kv_v # gen base kV
-                    gen_v = gen['Vg']*gen_baseV   # gen set point voltage (gen['Vg'] in p.u.)
-                    gen_p = gen['Pg']*mw_w   # gen ini. active power (gen['Pg'] in MVA)
-                    gen_q = gen['Qg']*mw_w   # gen ini. reactive power (gen['Qg'] in MVAr)
-                    gen_nom_s = abs(complex(gen['Pmax'], gen['Qmax'])) # gen nominal power (set default to mpc.baseMVA ? )
-
-                    dpsimpy_comp_dict[gen_name] = [dpsimpy.sp.ph1.SynchronGenerator(gen_name, dpsimpy.LogLevel.info)]
-                    dpsimpy_comp_dict[gen_name][0].set_parameters(gen_nom_s, gen_baseV, gen_p, gen_v, dpsimpy.PowerflowBusType.PQ, gen_q)
-                    dpsimpy_comp_dict[gen_name][0].set_base_voltage(gen_baseV)
-
-                    # add connections
-                    dpsimpy_comp_dict[gen_name].append([dpsimpy_busses_dict[bus_index]]) # [to bus]
+                    self.map_synchronous_machine(
+                        index,
+                        bus_index,
+                        bus_type=dpsimpy.PowerflowBusType.PQ,
+                        with_pss=with_pss,
+                        with_tg=with_tg,
+                        with_avr=with_avr,
+                    )
 
             # PV bus
             elif bus_type == 2:
@@ -655,12 +644,28 @@ class Reader:
             gen_data["Qg"].values[0] * mw_w
         )  # gen ini. reactive power (gen['Qg'] in MVAr)
 
+        if len(gen_data) > 1:
+            if (
+                all(gen_data['mBase'] == gen_data['mBase'].values[0]) and
+                all(gen_data['Vg'] == gen_data['Vg'].values[0]) and
+                all(gen_data['Pmax'] == gen_data['Pmax'].values[0]) and
+                all(gen_data['Qmax'] == gen_data['Qmax'].values[0])
+            ):
+                gen_p = (
+                    sum(gen_data["Pg"]) * mw_w
+                )  # gen ini. active power (gen['Pg'] in MVA)
+                gen_q = (
+                    sum(gen_data["Qg"]) * mw_w
+                )  # gen ini. reactive power (gen['Qg'] in MVAr)
+            else:
+                print("WARNING: Multiple generators connected to bus {} with different parameters. Using first generator parameters.".format(bus_index))
+
         gen = None
         if self.domain == Domain.PF:
             gen = self.dpsimpy_components.SynchronGenerator(gen_name, self.log_level)
             gen.set_parameters(gen_baseS, gen_baseV, gen_p, gen_v, bus_type, gen_q)
             gen.set_base_voltage(gen_baseV)
-            gen.modify_power_flow_bus_type(bus_type)
+            # gen.modify_power_flow_bus_type(bus_type)
         else:
             # get dynamic data of the generator
             gen_dyn_row_idx = self.mpc_dyn_gen_data.index[
