@@ -615,6 +615,7 @@ class Reader:
                     trafo.set_parameters(
                         fbus_baseV,
                         tbus_baseV,
+                        0,
                         np.abs(transf_ratioAbs),
                         np.angle(transf_ratioAbs),
                         dpsimpy.Math.single_phase_parameter_to_three_phase(transf_r),
