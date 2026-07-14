@@ -6,6 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *********************************************************************************/
 
+#include <dpsim-models/MathUtils.h>
 #include <dpsim-models/SP/SP_Ph1_Transformer.h>
 
 using namespace CPS;
@@ -55,7 +56,7 @@ void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
       **mResistance, **mInductance);
   SPDLOG_LOGGER_INFO(mSLog, "Tap Ratio={} [/] Phase Shift={} [deg]",
                      std::abs(**mRatio), std::arg(**mRatio));
-  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [W]", **mRatedPower);
+  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [VA]", **mRatedPower);
 
   mRatioAbs = std::abs(**mRatio);
   mRatioPhase = std::arg(**mRatio);
@@ -68,8 +69,16 @@ void SP::Ph1::Transformer::setParameters(Real nomVoltageEnd1,
                                          Real ratioAbs, Real ratioPhase,
                                          Real resistance, Real inductance) {
 
+  // Rated power is the nameplate apparent-power magnitude |S|, so it cannot be
+  // negative (a negative value is a caller error, not the unset default of 0).
+  if (ratedPower < 0) {
+    SPDLOG_LOGGER_ERROR(mSLog, "Rated power {} [VA] is negative; must be >= 0",
+                        ratedPower);
+    throw InvalidArgumentException();
+  }
+
   **mRatedPower = ratedPower;
-  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [W]", **mRatedPower);
+  SPDLOG_LOGGER_INFO(mSLog, "Rated Power ={} [VA]", **mRatedPower);
 
   SP::Ph1::Transformer::setParameters(nomVoltageEnd1, nomVoltageEnd2, ratioAbs,
                                       ratioPhase, resistance, inductance);
@@ -107,6 +116,8 @@ void SP::Ph1::Transformer::createSubComponents() {
         mNominalVoltageEnd1, mNominalVoltageEnd2);
     SPDLOG_LOGGER_INFO(mSLog, "Tap Ratio = {} [ ] Phase Shift = {} [deg]",
                        mRatioAbs, mRatioPhase);
+    // Refresh index cache after terminal swap so pfApplyAdmittanceMatrixStamp uses the correct order.
+    updateMatrixNodeIndices();
   }
 
   // Create series sub components
@@ -128,10 +139,21 @@ void SP::Ph1::Transformer::createSubComponents() {
     mSubInductor->connect({node(0), mVirtualNodes[0]});
   }
 
-  // Snubber sub-components created here (existence depends only on mBehaviour); their
-  // omega/power-dependent values are set in initializeParentFromNodesAndTerminals().
-  if (mBehaviour == TopologicalPowerComp::Behaviour::Initialization ||
-      mBehaviour == TopologicalPowerComp::Behaviour::MNASimulation) {
+  // Snubber sub-components created here; their omega/power-dependent values are set in
+  // initializeParentFromNodesAndTerminals(). Snubbers are sized off the rated power, so
+  // without a valid rating they collapse to infinite resistance and zero capacitance
+  // (NaN admittance) that poisons the system matrix; skip creating them in that case.
+  bool snubbersEnabled =
+      (mBehaviour == TopologicalPowerComp::Behaviour::Initialization ||
+       mBehaviour == TopologicalPowerComp::Behaviour::MNASimulation);
+  if (snubbersEnabled && **mRatedPower <= 0) {
+    SPDLOG_LOGGER_WARN(mSLog,
+                       "Rated power is {} [VA]; snubbers disabled for this "
+                       "transformer (cannot be sized off non-positive power).",
+                       **mRatedPower);
+    snubbersEnabled = false;
+  }
+  if (snubbersEnabled) {
 
     mSubSnubResistor1 =
         std::make_shared<SP::Ph1::Resistor>(**mName + "_snub_res1", mLogLevel);
@@ -305,15 +327,14 @@ void SP::Ph1::Transformer::pfApplyAdmittanceMatrixStamp(
   //check for inf or nan
   for (int i = 0; i < 2; i++)
     for (int j = 0; j < 2; j++)
-      if (std::isinf(mY_element.coeff(i, j).real()) ||
-          std::isinf(mY_element.coeff(i, j).imag())) {
-        std::cout << mY_element << std::endl;
-        std::cout << "Zl:" << mLeakage << std::endl;
-        std::cout << "tap:" << mRatioAbsPerUnit << std::endl;
-        std::stringstream ss;
-        ss << "Transformer>>" << this->name()
-           << ": infinite or nan values in the element Y at: " << i << "," << j;
-        throw std::invalid_argument(ss.str());
+      if (!Math::isFinite(mY_element.coeff(i, j))) {
+        SPDLOG_LOGGER_ERROR(
+            mSLog,
+            "Transformer {}: non-finite per-unit admittance {} "
+            "in element Y({},{}) (leakage {}, tap {})",
+            this->name(), Logger::complexToString(mY_element.coeff(i, j)), i, j,
+            Logger::complexToString(mLeakage), mRatioAbsPerUnit);
+        throw InvalidArgumentException();
       }
 
   //set the circuit matrix values

@@ -49,6 +49,8 @@ class PowerTransformer;
 class EquivalentShunt;
 class TopologicalNode;
 class ConductingEquipment;
+class Disconnector;
+class Breaker;
 }; // namespace CIMPP
 #else
 #include <CIMNamespaces.hpp>
@@ -75,6 +77,9 @@ template <typename T> const auto &cimString(const T &field) {
 class InvalidTopology {};
 
 class Reader {
+public:
+  enum class VoltageTargetUnit { Auto, PerUnit, Absolute };
+
 private:
   /// CIM logger
   Logger::Log mSLog;
@@ -106,6 +111,8 @@ private:
   std::map<String, TopologicalTerminal::Ptr> mPowerflowTerminals;
   ///
   Bool mUseProtectionSwitches = false;
+  /// Applies to ExternalNetworkInjection.RegulatingControl.targetValue only
+  VoltageTargetUnit mExtnetVoltageTargetUnit = VoltageTargetUnit::Auto;
 
   // #### shunt component settings ####
   /// activates global shunt capacitor setting
@@ -164,6 +171,10 @@ private:
   mapExternalNetworkInjection(CIMPP::ExternalNetworkInjection *extnet);
   /// Returns a shunt
   TopologicalPowerComp::Ptr mapEquivalentShunt(CIMPP::EquivalentShunt *shunt);
+  /// Returns a switch
+  TopologicalPowerComp::Ptr mapDisconnector(CIMPP::Disconnector *disc);
+  /// Returns a switch
+  TopologicalPowerComp::Ptr mapBreaker(CIMPP::Breaker *cb);
 
   // #### Helper Functions ####
   /// Determine base voltage associated with object
@@ -203,6 +214,7 @@ public:
   void setShuntConductance(Real v);
   /// If set, some components like loads include protection switches
   void useProtectionSwitches(Bool value = true);
+  void setExtnetVoltageTargetUnit(VoltageTargetUnit unit);
 };
 } // namespace CIM
 } // namespace CPS

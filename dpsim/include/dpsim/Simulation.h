@@ -43,10 +43,27 @@ public:
 
   const CPS::Attribute<Bool>::Ptr mPFKeepLastSolution;
 
+  /// Fallback base apparent power used by the PF solver when no
+  /// generator or transformer rating is available to derive it from.
+  const CPS::Attribute<Real>::Ptr mPFBaseApparentPowerFallback;
+
+  /// Maximum number of Newton-Raphson iterations for the PF solver.
+  const CPS::Attribute<CPS::UInt>::Ptr mPFMaxIterations;
+
   /// Use the sparse-Jacobian powerflow solver (scales to large grids).
   /// Default false (dense solver); opt in via setPFSolverUseSparse(true).
   /// Ignored (dense solver used) if no sparse linear solver is available.
   const CPS::Attribute<Bool>::Ptr mPFSolverUseSparse;
+
+  /// Enforce generator reactive-power limits in the powerflow via PV<->PQ
+  /// switching. Default false; opt in via setPFSolverEnforceReactiveLimits(true).
+  const CPS::Attribute<Bool>::Ptr mPFEnforceReactiveLimits;
+
+  /// Loose tolerance for a zone's Load base-voltage vs. its rating; default 0.1
+  const CPS::Attribute<Real>::Ptr mPFBaseVoltageLooseTolerance;
+
+  /// Strict tolerance between authoritative base-voltage sources in a zone; default 0.01
+  const CPS::Attribute<Real>::Ptr mPFBaseVoltageStrictTolerance;
 
   /// Determines if the network should be split
   /// into subnetworks at decoupling lines.
@@ -242,9 +259,29 @@ public:
 
   Bool getPFKeepLastSolution() const;
 
+  void setPFBaseApparentPowerFallback(Real value);
+
+  Real getPFBaseApparentPowerFallback() const;
+
+  void setPFMaxIterations(CPS::UInt value);
+
+  CPS::UInt getPFMaxIterations() const;
+
   void setPFSolverUseSparse(Bool value);
 
   Bool getPFSolverUseSparse() const;
+
+  void setPFSolverEnforceReactiveLimits(Bool value);
+
+  Bool getPFSolverEnforceReactiveLimits() const;
+
+  void setPFSolverBaseVoltageLooseTolerance(Real tolerance);
+
+  Real getPFSolverBaseVoltageLooseTolerance() const;
+
+  void setPFSolverBaseVoltageStrictTolerance(Real tolerance);
+
+  Real getPFSolverBaseVoltageStrictTolerance() const;
 
   // #### Simulation Control ####
   /// Create solver instances etc.

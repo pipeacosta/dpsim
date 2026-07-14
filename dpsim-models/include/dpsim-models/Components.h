@@ -56,10 +56,17 @@
 #ifdef WITH_VILLAS
 #include <dpsim-models/DP/DP_Ph1_ProfileVoltageSource.h>
 #endif
+#include <dpsim-models/DP/DP_ITypeSSNComp.h>
+#include <dpsim-models/DP/DP_Ph1_AvVoltSourceInverterStateSpace.h>
 #include <dpsim-models/DP/DP_Ph1_ControlledCurrentSource.h>
 #include <dpsim-models/DP/DP_Ph1_ControlledVoltageSource.h>
+#include <dpsim-models/DP/DP_Ph1_GenericTwoTerminalITypeSSN.h>
+#include <dpsim-models/DP/DP_Ph1_GenericTwoTerminalVTypeSSN.h>
+#include <dpsim-models/DP/DP_Ph1_MixedVTypeVariableSSNComp.h>
 #include <dpsim-models/DP/DP_Ph1_RxLine.h>
+#include <dpsim-models/DP/DP_Ph1_SSN_Full_Serial_RLC.h>
 #include <dpsim-models/DP/DP_Ph1_SVC.h>
+#include <dpsim-models/DP/DP_Ph1_Shunt.h>
 #include <dpsim-models/DP/DP_Ph1_Switch.h>
 #include <dpsim-models/DP/DP_Ph1_SynchronGenerator3OrderVBR.h>
 #include <dpsim-models/DP/DP_Ph1_SynchronGenerator4OrderPCM.h>
@@ -72,18 +79,28 @@
 #include <dpsim-models/DP/DP_Ph1_SynchronGeneratorIdeal.h>
 #include <dpsim-models/DP/DP_Ph1_SynchronGeneratorTrStab.h>
 #include <dpsim-models/DP/DP_Ph1_Transformer.h>
+#include <dpsim-models/DP/DP_Ph1_TwoTerminalITypeSSNComp.h>
+#include <dpsim-models/DP/DP_Ph1_TwoTerminalVTypeSSNComp.h>
 #include <dpsim-models/DP/DP_Ph1_VoltageSource.h>
 #include <dpsim-models/DP/DP_Ph1_VoltageSourceNorton.h>
 #include <dpsim-models/DP/DP_Ph1_VoltageSourceRamp.h>
 #include <dpsim-models/DP/DP_Ph1_varResSwitch.h>
+#include <dpsim-models/DP/DP_SSNComp.h>
+#include <dpsim-models/DP/DP_VTypeSSNComp.h>
 
 #include <dpsim-models/DP/DP_Ph3_Capacitor.h>
+#include <dpsim-models/DP/DP_Ph3_CurrentSource.h>
+#include <dpsim-models/DP/DP_Ph3_GenericTwoTerminalITypeSSN.h>
+#include <dpsim-models/DP/DP_Ph3_GenericTwoTerminalVTypeSSN.h>
 #include <dpsim-models/DP/DP_Ph3_Inductor.h>
 #include <dpsim-models/DP/DP_Ph3_PiLine.h>
 #include <dpsim-models/DP/DP_Ph3_Resistor.h>
+#include <dpsim-models/DP/DP_Ph3_SSN_Full_Serial_RLC.h>
 #include <dpsim-models/DP/DP_Ph3_SeriesResistor.h>
 #include <dpsim-models/DP/DP_Ph3_SeriesSwitch.h>
 #include <dpsim-models/DP/DP_Ph3_SynchronGeneratorDQTrapez.h>
+#include <dpsim-models/DP/DP_Ph3_TwoTerminalITypeSSNComp.h>
+#include <dpsim-models/DP/DP_Ph3_TwoTerminalVTypeSSNComp.h>
 #include <dpsim-models/DP/DP_Ph3_VoltageSource.h>
 #ifdef WITH_SUNDIALS
 #include <dpsim-models/DP/DP_Ph3_SynchronGeneratorDQODE.h>
@@ -145,12 +162,14 @@
 #include <dpsim-models/EMT/EMT_Ph3_PiecewiseLinearInductor.h>
 #include <dpsim-models/EMT/EMT_Ph3_RXLoad.h>
 #include <dpsim-models/EMT/EMT_Ph3_RxLine.h>
+#include <dpsim-models/EMT/EMT_Ph3_Shunt.h>
 #include <dpsim-models/EMT/EMT_Ph3_Switch.h>
 #include <dpsim-models/EMT/EMT_Ph3_SynchronGeneratorIdeal.h>
 #include <dpsim-models/EMT/EMT_Ph3_SynchronGeneratorTrStab.h>
 #include <dpsim-models/EMT/EMT_Ph3_SynchronGeneratorVBR.h>
 #include <dpsim-models/EMT/EMT_Ph3_Transformer.h>
 #include <dpsim-models/EMT/EMT_Ph3_TwoTerminalVTypeVariableSSNComp.h>
+#include <dpsim-models/EMT/EMT_Ph3_VSIVoltageControlVCO.h>
 
 #include <dpsim-models/Signal/CosineFMGenerator.h>
 #include <dpsim-models/Signal/DecouplingIdealTransformer_DP_Ph1.h>
@@ -176,3 +195,5 @@
 #include <dpsim-models/Signal/SteamTurbineGovernor.h>
 #include <dpsim-models/Signal/TurbineGovernor.h>
 #include <dpsim-models/Signal/TurbineGovernorType1.h>
+#include <dpsim-models/Signal/VCO.h>
+#include <dpsim-models/Signal/VoltageControllerVSI.h>

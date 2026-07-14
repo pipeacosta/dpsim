@@ -43,10 +43,13 @@ class Reader:
             self.mpc_raw_dyn = scipy.io.loadmat(mpc_dyn_file_path, simplify_cells=True)
             self.mpc_dyn_name = mpc_dyn_name
 
-    def process_mpc(self, frequency):
+    def process_mpc(self, frequency, filter_out_of_service=False):
         """
         Process raw mpc data and create corresponding dataframes
         @param frequency: system frequency
+        @param filter_out_of_service: if True, drop out-of-service generators/branches
+                                      (status == 0) and isolated buses (type == 4)
+                                      before building the dataframes used downstream
         """
 
         # System frequency (not included in mpc but needed for setting dpsimpy component parameters i.e inductances, capacitances ..)
@@ -169,6 +172,22 @@ class Reader:
                 )
             )
 
+        # Out-of-service generators/branches and isolated buses are excluded only
+        # on request (opt-in), so grids relying on the previous always-included
+        # behavior are unaffected. This must run after mpc_bus_names_dict/
+        # mpc_bus_assets_dict are built above, since those zip bus_i positionally
+        # against the raw (unfiltered) bus_names/bus_assets arrays.
+        if filter_out_of_service:
+            self.mpc_bus_data = self.mpc_bus_data[
+                self.mpc_bus_data["type"] != 4
+            ].reset_index(drop=True)
+            self.mpc_gen_data = self.mpc_gen_data[
+                self.mpc_gen_data["status"] == 1
+            ].reset_index(drop=True)
+            self.mpc_branch_data = self.mpc_branch_data[
+                self.mpc_branch_data["status"] == 1
+            ].reset_index(drop=True)
+
         #### TODO Generator costs ####
 
     def process_mpc_dyn(self):
@@ -283,6 +302,7 @@ class Reader:
         with_pss=True,
         with_avr=True,
         with_tg=True,
+        filter_out_of_service=False,
     ):
         """
         Create dpsim objects with the data contained in the mpc files.
@@ -292,12 +312,17 @@ class Reader:
         @param domain: modeling domain to be used in dpsim (PF, SP, EMT or DP)
         @param frequency: system frequency
         @param log_level: log level used by the dpsim objects
+        @param filter_out_of_service: if True, exclude out-of-service
+                                      generators/branches and isolated buses
+                                      instead of instantiating them
         """
         self.log_level = log_level
         self.domain = domain
 
         # process mpc files
-        self.process_mpc(frequency=frequency)
+        self.process_mpc(
+            frequency=frequency, filter_out_of_service=filter_out_of_service
+        )
         if self.dyn_data:
             self.process_mpc_dyn()
 
@@ -463,6 +488,17 @@ class Reader:
                 index, "tbus"
             ]  # matpower index 1 ... N
 
+            # skip branches dangling from a bus removed as isolated (filter_out_of_service)
+            if (
+                self.get_node_name(fbus_index) not in self.dpsimpy_busses_dict
+                or self.get_node_name(tbus_index) not in self.dpsimpy_busses_dict
+            ):
+                print(
+                    "Skipping branch %s-%s: connects to a removed isolated bus"
+                    % (fbus_index, tbus_index)
+                )
+                continue
+
             # get rows of interest
             tmp_fbus = self.mpc_bus_data.loc[self.mpc_bus_data["bus_i"] == fbus_index]
             tmp_tbus = self.mpc_bus_data.loc[self.mpc_bus_data["bus_i"] == tbus_index]
@@ -585,9 +621,18 @@ class Reader:
                         dpsimpy.Math.single_phase_parameter_to_three_phase(transf_l),
                     )
                 else:
+                    # The transformer snubbers are sized as a fraction of rated power, so
+                    # mRatedPower=0 yields NaN snubber admittances. Use the branch's own MVA
+                    # rating (rateA) so the snubber tracks the device; matpower uses rateA=0
+                    # for "unrated", so fall back to the system base only in that case.
+                    branch_rateA = self.mpc_branch_data.at[index, "rateA"] * mw_w
+                    rated_power = (
+                        branch_rateA if branch_rateA > 0 else self.mpc_base_power_MVA
+                    )
                     trafo.set_parameters(
                         fbus_baseV,
                         tbus_baseV,
+                        rated_power,
                         np.abs(transf_ratioAbs),
                         np.angle(transf_ratioAbs),
                         transf_r,
@@ -643,6 +688,12 @@ class Reader:
         gen_q = (
             gen_data["Qg"].values[0] * mw_w
         )  # gen ini. reactive power (gen['Qg'] in MVAr)
+        gen_q_max = (
+            gen_data["Qmax"].values[0] * mw_w
+        )  # gen reactive power upper limit (gen['Qmax'] in MVAr)
+        gen_q_min = (
+            gen_data["Qmin"].values[0] * mw_w
+        )  # gen reactive power lower limit (gen['Qmin'] in MVAr)
 
         if len(gen_data) > 1:
             if (
@@ -663,7 +714,16 @@ class Reader:
         gen = None
         if self.domain == Domain.PF:
             gen = self.dpsimpy_components.SynchronGenerator(gen_name, self.log_level)
-            gen.set_parameters(gen_baseS, gen_baseV, gen_p, gen_v, bus_type, gen_q)
+            gen.set_parameters(
+                gen_baseS,
+                gen_baseV,
+                gen_p,
+                gen_v,
+                bus_type,
+                gen_q,
+                q_limit_max=gen_q_max,
+                q_limit_min=gen_q_min,
+            )
             gen.set_base_voltage(gen_baseV)
             # gen.modify_power_flow_bus_type(bus_type)
         else:
@@ -1100,13 +1160,22 @@ class Reader:
         return topologies
 
     def load_mpc(
-        self, frequency=60, domain=Domain.PF, with_pss=True, with_avr=True, with_tg=True
+        self,
+        frequency=60,
+        domain=Domain.PF,
+        with_pss=True,
+        with_avr=True,
+        with_tg=True,
+        filter_out_of_service=False,
     ):
         """
         Read mpc files and create DPsim topology
 
         @param frequency: system frequency
         @param domain: domain to be used in DPsim
+        @param filter_out_of_service: if True, exclude out-of-service
+                                      generators/branches and isolated buses
+                                      instead of instantiating them
         """
         self.create_dpsim_objects(
             domain=domain,
@@ -1114,6 +1183,7 @@ class Reader:
             with_pss=with_pss,
             with_avr=with_avr,
             with_tg=with_tg,
+            filter_out_of_service=filter_out_of_service,
         )
         self.create_dpsim_topology()
 

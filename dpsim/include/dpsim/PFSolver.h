@@ -34,6 +34,9 @@ protected:
   CPS::TopologicalNode::List mPVBuses;
   /// Vector of nodes characterized as VD buses
   CPS::TopologicalNode::List mVDBuses;
+  /// Original PQ/PV classification (snapshot before Q-limit switching)
+  CPS::TopologicalNode::List mPQBusesOrig;
+  CPS::TopologicalNode::List mPVBusesOrig;
   /// Vector with indices of PQ buses
   std::vector<CPS::UInt> mPQBusIndices;
   /// Vector with indices of PV buses
@@ -83,8 +86,20 @@ protected:
   CPS::UInt mMaxIterations = 20;
   /// Actual number of iterations
   CPS::UInt mIterations;
+  /// Enforce generator reactive-power limits via PV<->PQ outer-loop switching
+  CPS::Bool mEnforceReactiveLimits = false;
+  /// Maximum number of Q-limit outer iterations
+  CPS::UInt mMaxOuterIterations = 10;
+  /// Maximum number of PV<->PQ switches per bus before it is frozen (anti-oscillation)
+  CPS::UInt mMaxQLimitSwitchesPerBus = 2;
+  /// Relative tolerance for non-authoritative (e.g. Load) base-voltage candidates vs. the zone's rating
+  CPS::Real mBaseVoltageLooseTolerance = 0.1;
+  /// Relative tolerance between authoritative base-voltage sources (generator/transformer/network-injection/VSI) within a zone
+  CPS::Real mBaseVoltageStrictTolerance = 0.01;
   /// Base power of per-unit system
   CPS::Real mBaseApparentPower;
+  /// Fallback base apparent power if no generator or transformer rating is found
+  CPS::Real mBaseApparentPowerFallback = 100e6;
   /// Convergence flag
   CPS::Bool isConverged = false;
   /// Flag whether solution vectors are initialized
@@ -117,8 +132,19 @@ protected:
   void setBaseApparentPower();
   /// Determine bus type for all buses
   void determinePFBusType();
-  /// Determine base voltages for each node
-  void determineNodeBaseVoltages();
+  /// Rebuild index vectors + counts from the PQ/PV/VD node lists
+  void rebuildBusIndexAggregates();
+  /// Re-derive index vectors and resize the system after PV<->PQ switching
+  void reclassifyBuses();
+  /// Restore the original PV/PQ classification before a fresh solve
+  void resetToOriginalClassification();
+  /// Clear Q-limit bookkeeping; overridden by PFSolverPowerPolar
+  virtual void clearReactiveLimitState() {}
+  /// Base voltage a single component reports for `node`, or 0 if unknown
+  CPS::Real componentBaseVoltage(CPS::TopologicalPowerComp::Ptr comp,
+                                 CPS::TopologicalNode::Ptr node);
+  /// Determine, verify and propagate each node's base voltage per electrical zone
+  void propagateAndVerifyBaseVoltage();
 
   /// Compose admittance matrix
   void composeAdmittanceMatrix();
@@ -128,6 +154,10 @@ protected:
   CPS::Real B(int i, int j);
   /// Solves the powerflow problem
   Bool solvePowerflow();
+  /// Run a single Newton-Raphson solve with the current bus classification
+  Bool runNewtonRaphson();
+  /// Switch generators violating their Q limits between PV/PQ; base impl is a no-op
+  virtual CPS::Bool enforceReactiveLimits() { return false; }
   /// Allocate Jacobian storage; dense by default, sparse subclass overrides
   virtual void setUpJacobianStorage();
   /// Solve the linearized system mJ*mX = mF into mX; sparse subclass overrides
@@ -163,7 +193,36 @@ public:
     mKeepLastSolution = keepLastSolution;
   }
 
+  /// Enable generator reactive-limit enforcement (PV<->PQ outer loop)
+  void setEnforceReactiveLimits(CPS::Bool value) {
+    mEnforceReactiveLimits = value;
+  }
+
+  /// Raise for grids with legitimate large voltage drop (e.g. untapped feeders)
+  void setBaseVoltageLooseTolerance(CPS::Real tolerance) {
+    mBaseVoltageLooseTolerance = tolerance;
+  }
+
+  /// Override the tolerance between authoritative base-voltage sources within a zone
+  void setBaseVoltageStrictTolerance(CPS::Real tolerance) {
+    mBaseVoltageStrictTolerance = tolerance;
+  }
+
   CPS::Bool getKeepLastSolution() const { return mKeepLastSolution; }
+
+  void setBaseApparentPowerFallback(CPS::Real baseApparentPowerFallback) {
+    mBaseApparentPowerFallback = baseApparentPowerFallback;
+  }
+
+  CPS::Real getBaseApparentPowerFallback() const {
+    return mBaseApparentPowerFallback;
+  }
+
+  void setMaxIterations(CPS::UInt maxIterations) {
+    mMaxIterations = maxIterations;
+  }
+
+  CPS::UInt getMaxIterations() const { return mMaxIterations; }
 
   class SolveTask : public CPS::Task {
   public:

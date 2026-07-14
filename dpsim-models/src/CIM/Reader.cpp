@@ -59,6 +59,10 @@ void Reader::useProtectionSwitches(Bool value) {
   mUseProtectionSwitches = value;
 }
 
+void Reader::setExtnetVoltageTargetUnit(VoltageTargetUnit unit) {
+  mExtnetVoltageTargetUnit = unit;
+}
+
 Real Reader::unitValue(Real value, CIMPP::UnitMultiplier mult) {
   switch (mult) {
   case UnitMultiplier::p:
@@ -115,7 +119,10 @@ TopologicalPowerComp::Ptr Reader::mapComponent(BaseClass *obj) {
   if (CIMPP::EquivalentShunt *shunt =
           dynamic_cast<CIMPP::EquivalentShunt *>(obj))
     return mapEquivalentShunt(shunt);
-
+  if (CIMPP::Disconnector *disc = dynamic_cast<CIMPP::Disconnector *>(obj))
+    return mapDisconnector(disc);
+  if (CIMPP::Breaker *cb = dynamic_cast<CIMPP::Breaker *>(obj))
+    return mapBreaker(cb);
   return nullptr;
 }
 
@@ -349,7 +356,20 @@ Reader::mapEnergyConsumer(CIMPP::EnergyConsumer *consumer) {
     auto load = std::make_shared<SP::Ph1::Load>(consumerRid, consumerName,
                                                 mComponentLogLevel);
 
-    // P and Q values will be set according to SvPowerFlow data
+    // Seed P/Q from SSH when present; this makes SSH win over any
+    // SvPowerFlow data (skip if no SSH file was loaded at all, so the
+    // SV-derived terminal-power fallback still applies).
+    if (consumer->p.initialized || consumer->q.initialized) {
+      Real p = 0;
+      Real q = 0;
+      if (consumer->p.initialized)
+        p = unitValue(consumer->p.value, UnitMultiplier::M);
+      if (consumer->q.initialized)
+        q = unitValue(consumer->q.value, UnitMultiplier::M);
+      Real baseVoltage = determineBaseVoltageAssociatedWithEquipment(consumer);
+      load->setParameters(p, q, baseVoltage);
+    }
+
     load->modifyPowerFlowBusType(
         PowerflowBusType::
             PQ); // for powerflow solver set as PQ component as default
@@ -841,6 +861,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
               Real setPointActivePower = 0;
               Real setPointVoltage = 0;
               Real maximumReactivePower = 1e12;
+              PowerflowBusType busType = PowerflowBusType::PV;
               try {
                 setPointActivePower =
                     unitValue(genUnit->initialP.value, UnitMultiplier::M);
@@ -859,9 +880,12 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
                 SPDLOG_LOGGER_INFO(mSLog, "    setPointVoltage={}",
                                    setPointVoltage);
               } else {
-                std::cerr << "Uninitalized setPointVoltage for GeneratingUnit "
-                          << machineName << ". Using default value of "
-                          << setPointVoltage << std::endl;
+                // No RegulatingControl -> not voltage-regulating; map as PQ instead of guessing a PV voltage.
+                busType = PowerflowBusType::PQ;
+                SPDLOG_LOGGER_INFO(
+                    mSLog,
+                    "    No RegulatingControl for {}, mapping as PQ generator",
+                    machineName);
               }
               try {
                 maximumReactivePower =
@@ -880,7 +904,7 @@ Reader::mapSynchronousMachine(CIMPP::SynchronousMachine *machine) {
               gen->setParameters(
                   unitValue(machine->ratedS.value, UnitMultiplier::M),
                   unitValue(machine->ratedU.value, UnitMultiplier::k),
-                  setPointActivePower, setPointVoltage, PowerflowBusType::PV);
+                  setPointActivePower, setPointVoltage, busType);
               gen->setBaseVoltage(
                   unitValue(machine->ratedU.value, UnitMultiplier::k));
               return gen;
@@ -1056,11 +1080,27 @@ Reader::mapExternalNetworkInjection(CIMPP::ExternalNetworkInjection *extnet) {
 
       try {
         if (extnet->RegulatingControl) {
+          // targetValueUnitMultiplier is uninitialized if unset, so Auto guesses by magnitude
+          Real rawTarget = extnet->RegulatingControl->targetValue.value;
+          Bool perUnit;
+          switch (mExtnetVoltageTargetUnit) {
+          case VoltageTargetUnit::PerUnit:
+            perUnit = true;
+            break;
+          case VoltageTargetUnit::Absolute:
+            perUnit = false;
+            break;
+          case VoltageTargetUnit::Auto:
+          default:
+            perUnit = std::abs(rawTarget) >= 0.5 && std::abs(rawTarget) <= 1.5;
+            break;
+          }
+          Real voltageSetPoint = perUnit
+                                     ? rawTarget * baseVoltage
+                                     : unitValue(rawTarget, UnitMultiplier::k);
           SPDLOG_LOGGER_INFO(mSLog, "       Voltage set-point={}",
-                             (float)extnet->RegulatingControl->targetValue);
-          cpsextnet->setParameters(
-              extnet->RegulatingControl->targetValue *
-              baseVoltage); // assumes that value is specified in CIM data in per unit
+                             voltageSetPoint);
+          cpsextnet->setParameters(voltageSetPoint);
         } else {
           SPDLOG_LOGGER_INFO(
               mSLog, "       No voltage set-point defined. Using 1 per unit.");
@@ -1099,6 +1139,145 @@ Reader::mapEquivalentShunt(CIMPP::EquivalentShunt *shunt) {
   cpsShunt->setParameters(shunt->g.value, shunt->b.value);
   cpsShunt->setBaseVoltage(baseVoltage);
   return cpsShunt;
+}
+
+TopologicalPowerComp::Ptr Reader::mapDisconnector(CIMPP::Disconnector *disc) {
+
+  SPDLOG_LOGGER_INFO(mSLog, "Found Disconnector {} with status {}",
+                     cimString(disc->name), (bool)disc->open.value);
+
+  Real openResistance = 1e12;
+  Real closedResistance = 1e-6;
+
+  Bool status = disc->open.value;
+
+  if (mPhase == PhaseType::ABC) {
+    Matrix openResistance3Ph =
+        CPS::Math::singlePhaseParameterToThreePhase(openResistance);
+    Matrix closedResistance3Ph =
+        CPS::Math::singlePhaseParameterToThreePhase(closedResistance);
+
+    if (mDomain == Domain::EMT) {
+      auto cpsSwitch = std::make_shared<EMT::Ph3::Switch>(
+          disc->mRID, disc->name, mComponentLogLevel);
+
+      cpsSwitch->setParameters(openResistance3Ph, closedResistance3Ph);
+
+      if (status == true) {
+        cpsSwitch->openSwitch();
+      } else {
+        cpsSwitch->closeSwitch();
+      }
+
+      return cpsSwitch;
+    } else if (mDomain == Domain::DP) {
+      SPDLOG_LOGGER_INFO(mSLog,
+                         "Mapping of Disconnector for DP::Ph3 not existent!");
+
+      return nullptr;
+    } else {
+      SPDLOG_LOGGER_INFO(mSLog,
+                         "Mapping of Disconnector for SP::Ph3 not existent!");
+      return nullptr;
+    }
+  } else {
+    std::shared_ptr<CPS::TopologicalPowerComp> topoSwitch;
+    std::shared_ptr<CPS::Base::Ph1::Switch> cpsSwitch;
+
+    if (mDomain == Domain::EMT) {
+      auto sw = std::make_shared<EMT::Ph1::Switch>(disc->mRID, disc->name,
+                                                   mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    } else if (mDomain == Domain::DP) {
+      auto sw = std::make_shared<DP::Ph1::Switch>(disc->mRID, disc->name,
+                                                  mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    } else {
+      auto sw = std::make_shared<SP::Ph1::Switch>(disc->mRID, disc->name,
+                                                  mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    }
+
+    cpsSwitch->setParameters(openResistance, closedResistance);
+    if (status) {
+      cpsSwitch->open();
+    } else {
+      cpsSwitch->close();
+    }
+
+    return topoSwitch;
+  }
+}
+
+TopologicalPowerComp::Ptr Reader::mapBreaker(CIMPP::Breaker *cb) {
+  SPDLOG_LOGGER_INFO(mSLog, "Found Breaker {} with status {}",
+                     cimString(cb->name), (bool)cb->open.value);
+
+  Real openResistance = 1e12;
+  Real closedResistance = 1e-6;
+
+  Bool status = cb->open.value;
+
+  if (mPhase == PhaseType::ABC) {
+    Matrix openResistance3Ph =
+        CPS::Math::singlePhaseParameterToThreePhase(openResistance);
+    Matrix closedResistance3Ph =
+        CPS::Math::singlePhaseParameterToThreePhase(closedResistance);
+
+    if (mDomain == Domain::EMT) {
+      auto cpsSwitch = std::make_shared<EMT::Ph3::Switch>(cb->mRID, cb->name,
+                                                          mComponentLogLevel);
+
+      cpsSwitch->setParameters(openResistance3Ph, closedResistance3Ph);
+
+      if (status == true) {
+        cpsSwitch->openSwitch();
+      } else {
+        cpsSwitch->closeSwitch();
+      }
+
+      return cpsSwitch;
+    } else if (mDomain == Domain::DP) {
+      SPDLOG_LOGGER_INFO(mSLog, "Mapping of Breaker for DP::Ph3 not existent!");
+
+      return nullptr;
+    } else {
+      SPDLOG_LOGGER_INFO(mSLog, "Mapping of Breaker for SP::Ph3 not existent!");
+      return nullptr;
+    }
+  } else {
+    std::shared_ptr<CPS::TopologicalPowerComp> topoSwitch;
+    std::shared_ptr<CPS::Base::Ph1::Switch> cpsSwitch;
+
+    if (mDomain == Domain::EMT) {
+      auto sw = std::make_shared<EMT::Ph1::Switch>(cb->mRID, cb->name,
+                                                   mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    } else if (mDomain == Domain::DP) {
+      auto sw = std::make_shared<DP::Ph1::Switch>(cb->mRID, cb->name,
+                                                  mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    } else {
+      auto sw = std::make_shared<SP::Ph1::Switch>(cb->mRID, cb->name,
+                                                  mComponentLogLevel);
+      cpsSwitch = sw;
+      topoSwitch = sw;
+    }
+
+    cpsSwitch->setParameters(openResistance, closedResistance);
+    if (status) {
+      cpsSwitch->open();
+    } else {
+      cpsSwitch->close();
+    }
+
+    return topoSwitch;
+  }
 }
 
 Real Reader::determineBaseVoltageAssociatedWithEquipment(

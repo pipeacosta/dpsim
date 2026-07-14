@@ -192,6 +192,17 @@ PYBIND11_MODULE(dpsimpy, m) {
            py::return_value_policy::reference_internal)
       .def("get_continuous_eigenvalues",
            &DPsim::StateSpaceModalAnalysis::getContinuousEigenvalues,
+           py::return_value_policy::reference_internal)
+      .def("get_right_eigenvectors",
+           &DPsim::StateSpaceModalAnalysis::getRightEigenvectors,
+           py::return_value_policy::reference_internal)
+      .def("get_left_eigenvectors",
+           &DPsim::StateSpaceModalAnalysis::getLeftEigenvectors,
+           py::return_value_policy::reference_internal)
+      .def("get_participation_factors",
+           &DPsim::StateSpaceModalAnalysis::getParticipationFactors,
+           py::return_value_policy::reference_internal)
+      .def("get_state_names", &DPsim::StateSpaceModalAnalysis::getStateNames,
            py::return_value_policy::reference_internal);
 
   py::class_<DPsim::Simulation>(m, "Simulation")
@@ -208,8 +219,26 @@ PYBIND11_MODULE(dpsimpy, m) {
            &DPsim::Simulation::setPFKeepLastSolution)
       .def("get_pf_keep_last_solution",
            &DPsim::Simulation::getPFKeepLastSolution)
+      .def("set_pf_base_apparent_power_fallback",
+           &DPsim::Simulation::setPFBaseApparentPowerFallback)
+      .def("get_pf_base_apparent_power_fallback",
+           &DPsim::Simulation::getPFBaseApparentPowerFallback)
+      .def("set_pf_max_iterations", &DPsim::Simulation::setPFMaxIterations)
+      .def("get_pf_max_iterations", &DPsim::Simulation::getPFMaxIterations)
       .def("set_pf_solver_use_sparse", &DPsim::Simulation::setPFSolverUseSparse)
       .def("get_pf_solver_use_sparse", &DPsim::Simulation::getPFSolverUseSparse)
+      .def("set_pf_solver_enforce_q_limits",
+           &DPsim::Simulation::setPFSolverEnforceReactiveLimits)
+      .def("get_pf_solver_enforce_q_limits",
+           &DPsim::Simulation::getPFSolverEnforceReactiveLimits)
+      .def("set_pf_solver_base_voltage_loose_tolerance",
+           &DPsim::Simulation::setPFSolverBaseVoltageLooseTolerance)
+      .def("get_pf_solver_base_voltage_loose_tolerance",
+           &DPsim::Simulation::getPFSolverBaseVoltageLooseTolerance)
+      .def("set_pf_solver_base_voltage_strict_tolerance",
+           &DPsim::Simulation::setPFSolverBaseVoltageStrictTolerance)
+      .def("get_pf_solver_base_voltage_strict_tolerance",
+           &DPsim::Simulation::getPFSolverBaseVoltageStrictTolerance)
       .def("set_domain", &DPsim::Simulation::setDomain)
       .def("start", &DPsim::Simulation::start)
       .def("next", &DPsim::Simulation::next)
@@ -427,6 +456,12 @@ PYBIND11_MODULE(dpsimpy, m) {
       .def("__str__", &getAttributeList);
 
 #ifdef WITH_CIM
+  py::enum_<CPS::CIM::Reader::VoltageTargetUnit>(m,
+                                                 "CIMReaderVoltageTargetUnit")
+      .value("Auto", CPS::CIM::Reader::VoltageTargetUnit::Auto)
+      .value("PerUnit", CPS::CIM::Reader::VoltageTargetUnit::PerUnit)
+      .value("Absolute", CPS::CIM::Reader::VoltageTargetUnit::Absolute);
+
   py::class_<CPS::CIM::Reader>(m, "CIMReader")
       .def(py::init<std::string, CPS::Logger::Level, CPS::Logger::Level>(),
            "name"_a, "loglevel"_a = CPS::Logger::Level::info,
@@ -434,7 +469,9 @@ PYBIND11_MODULE(dpsimpy, m) {
       .def("loadCIM", (CPS::SystemTopology(CPS::CIM::Reader::*)(
                           CPS::Real, const std::list<CPS::String> &,
                           CPS::Domain, CPS::PhaseType, CPS::GeneratorType)) &
-                          CPS::CIM::Reader::loadCIM);
+                          CPS::CIM::Reader::loadCIM)
+      .def("set_extnet_voltage_target_unit",
+           &CPS::CIM::Reader::setExtnetVoltageTargetUnit, "unit"_a);
 #endif
 
   py::class_<CPS::CSVReader>(m, "CSVReader")

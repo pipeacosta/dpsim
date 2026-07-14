@@ -36,7 +36,12 @@ Simulation::Simulation(String name, Logger::Level logLevel)
       mFinalTime(AttributeStatic<Real>::make(0.001)),
       mTimeStep(AttributeStatic<Real>::make(0.001)),
       mPFKeepLastSolution(CPS::AttributeStatic<Bool>::make(false)),
+      mPFBaseApparentPowerFallback(CPS::AttributeStatic<Real>::make(100e6)),
+      mPFMaxIterations(CPS::AttributeStatic<CPS::UInt>::make(20)),
       mPFSolverUseSparse(CPS::AttributeStatic<Bool>::make(false)),
+      mPFEnforceReactiveLimits(CPS::AttributeStatic<Bool>::make(false)),
+      mPFBaseVoltageLooseTolerance(CPS::AttributeStatic<Real>::make(0.1)),
+      mPFBaseVoltageStrictTolerance(CPS::AttributeStatic<Real>::make(0.01)),
       mSplitSubnets(AttributeStatic<Bool>::make(true)),
       mSteadyStateInit(AttributeStatic<Bool>::make(false)),
       mLogLevel(logLevel) {
@@ -49,7 +54,12 @@ Simulation::Simulation(String name, CommandLineArgs &args)
       mFinalTime(AttributeStatic<Real>::make(args.duration)),
       mTimeStep(AttributeStatic<Real>::make(args.timeStep)),
       mPFKeepLastSolution(CPS::AttributeStatic<Bool>::make(false)),
+      mPFBaseApparentPowerFallback(CPS::AttributeStatic<Real>::make(100e6)),
+      mPFMaxIterations(CPS::AttributeStatic<CPS::UInt>::make(20)),
       mPFSolverUseSparse(CPS::AttributeStatic<Bool>::make(false)),
+      mPFEnforceReactiveLimits(CPS::AttributeStatic<Bool>::make(false)),
+      mPFBaseVoltageLooseTolerance(CPS::AttributeStatic<Real>::make(0.1)),
+      mPFBaseVoltageStrictTolerance(CPS::AttributeStatic<Real>::make(0.01)),
       mSplitSubnets(AttributeStatic<Bool>::make(true)),
       mSteadyStateInit(AttributeStatic<Bool>::make(false)),
       mLogLevel(args.logLevel), mDomain(args.solver.domain),
@@ -123,6 +133,11 @@ template <typename VarType> void Simulation::createSolvers() {
 #endif
 
     pfSolver->setKeepLastSolution(**mPFKeepLastSolution);
+    pfSolver->setBaseApparentPowerFallback(**mPFBaseApparentPowerFallback);
+    pfSolver->setMaxIterations(**mPFMaxIterations);
+    pfSolver->setEnforceReactiveLimits(**mPFEnforceReactiveLimits);
+    pfSolver->setBaseVoltageLooseTolerance(**mPFBaseVoltageLooseTolerance);
+    pfSolver->setBaseVoltageStrictTolerance(**mPFBaseVoltageStrictTolerance);
 
     solver = pfSolver;
 
@@ -342,11 +357,49 @@ void Simulation::setPFKeepLastSolution(Bool value) {
 
 Bool Simulation::getPFKeepLastSolution() const { return **mPFKeepLastSolution; }
 
+void Simulation::setPFBaseApparentPowerFallback(Real value) {
+  **mPFBaseApparentPowerFallback = value;
+}
+
+Real Simulation::getPFBaseApparentPowerFallback() const {
+  return **mPFBaseApparentPowerFallback;
+}
+
+void Simulation::setPFMaxIterations(CPS::UInt value) {
+  **mPFMaxIterations = value;
+}
+
+CPS::UInt Simulation::getPFMaxIterations() const { return **mPFMaxIterations; }
+
 void Simulation::setPFSolverUseSparse(Bool value) {
   **mPFSolverUseSparse = value;
 }
 
 Bool Simulation::getPFSolverUseSparse() const { return **mPFSolverUseSparse; }
+
+void Simulation::setPFSolverEnforceReactiveLimits(Bool value) {
+  **mPFEnforceReactiveLimits = value;
+}
+
+Bool Simulation::getPFSolverEnforceReactiveLimits() const {
+  return **mPFEnforceReactiveLimits;
+}
+
+void Simulation::setPFSolverBaseVoltageLooseTolerance(Real tolerance) {
+  **mPFBaseVoltageLooseTolerance = tolerance;
+}
+
+Real Simulation::getPFSolverBaseVoltageLooseTolerance() const {
+  return **mPFBaseVoltageLooseTolerance;
+}
+
+void Simulation::setPFSolverBaseVoltageStrictTolerance(Real tolerance) {
+  **mPFBaseVoltageStrictTolerance = tolerance;
+}
+
+Real Simulation::getPFSolverBaseVoltageStrictTolerance() const {
+  return **mPFBaseVoltageStrictTolerance;
+}
 
 void Simulation::start() {
   SPDLOG_LOGGER_INFO(mLog, "Initialize simulation: {}", **mName);
@@ -485,16 +538,20 @@ Simulation::getStateSpaceExtractor(UInt solverIndex) const {
         "Simulation::getStateSpaceExtractor(): solver index out of range.");
   }
 
-  const auto mnaSolver =
-      std::dynamic_pointer_cast<MnaSolver<Real>>(mSolvers[solverIndex]);
-
-  if (!mnaSolver) {
-    throw std::logic_error(
-        "Simulation::getStateSpaceExtractor(): selected solver is not a "
-        "real-valued MNA solver.");
+  if (const auto realMnaSolver =
+          std::dynamic_pointer_cast<MnaSolver<Real>>(mSolvers[solverIndex])) {
+    return realMnaSolver->getStateSpaceExtractor();
   }
 
-  return mnaSolver->getStateSpaceExtractor();
+  if (const auto complexMnaSolver =
+          std::dynamic_pointer_cast<MnaSolver<Complex>>(
+              mSolvers[solverIndex])) {
+    return complexMnaSolver->getStateSpaceExtractor();
+  }
+
+  throw std::logic_error(
+      "Simulation::getStateSpaceExtractor(): selected solver is not an "
+      "MNA solver.");
 }
 
 CPS::AttributeBase::Ptr Simulation::getIdObjAttribute(const String &comp,

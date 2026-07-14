@@ -6,6 +6,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *********************************************************************************/
 
+#include <dpsim-models/MathUtils.h>
 #include <dpsim-models/SP/SP_Ph1_PiLine.h>
 
 using namespace CPS;
@@ -41,14 +42,17 @@ void SP::Ph1::PiLine::setParameters(Real resistance, Real inductance,
 
   if (capacitance > 0) {
     **mParallelCap = capacitance;
+    mParallelCapIsFallback = false;
   } else {
     **mParallelCap = 1e-12;
+    mParallelCapIsFallback = true;
     SPDLOG_LOGGER_WARN(
         mSLog, "Zero value for Capacitance, setting default value of C={} [F]",
         **mParallelCap);
   }
   if (conductance > 0) {
     **mParallelCond = conductance;
+    mParallelCondIsFallback = false;
   } else {
     if (mBehaviour == Behaviour::Initialization)
       **mParallelCond =
@@ -57,6 +61,7 @@ void SP::Ph1::PiLine::setParameters(Real resistance, Real inductance,
               : 1e-6; // init mode for initFromPowerFlow of mna system components
     else
       **mParallelCond = (conductance > 0) ? conductance : 1e-6;
+    mParallelCondIsFallback = true;
     SPDLOG_LOGGER_WARN(
         mSLog, "Zero value for Conductance, setting default value of G={} [S]",
         **mParallelCond);
@@ -117,11 +122,21 @@ void SP::Ph1::PiLine::pfApplyAdmittanceMatrixStamp(SparseMatrixCompRow &Y) {
   int bus1 = this->matrixNodeIndex(0);
   int bus2 = this->matrixNodeIndex(1);
 
+  // Exclude MNA-conditioning fallback shunt from standalone PF, keep it for Initialization
+  Real parallelCondPerUnit =
+      (mBehaviour == Behaviour::PFSimulation && mParallelCondIsFallback)
+          ? 0.
+          : mParallelCondPerUnit;
+  Real parallelCapPerUnit =
+      (mBehaviour == Behaviour::PFSimulation && mParallelCapIsFallback)
+          ? 0.
+          : mParallelCapPerUnit;
+
   //create the element admittance matrix
   Complex y =
       Complex(1, 0) / Complex(mSeriesResPerUnit, 1. * mSeriesIndPerUnit);
   Complex ys =
-      Complex(mParallelCondPerUnit, 1. * mParallelCapPerUnit) / Complex(2, 0);
+      Complex(parallelCondPerUnit, 1. * parallelCapPerUnit) / Complex(2, 0);
 
   //Fill the internal matrix
   mY_element = MatrixComp(2, 2);
@@ -133,16 +148,13 @@ void SP::Ph1::PiLine::pfApplyAdmittanceMatrixStamp(SparseMatrixCompRow &Y) {
   //check for inf or nan
   for (int i = 0; i < 2; i++)
     for (int j = 0; j < 2; j++)
-      if (std::isinf(mY_element.coeff(i, j).real()) ||
-          std::isinf(mY_element.coeff(i, j).imag())) {
-        std::cout << mY_element << std::endl;
-        std::stringstream ss;
-        ss << "Line>>" << this->name()
-           << ": infinite or nan values in the element Y at: " << i << "," << j;
-        throw std::invalid_argument(ss.str());
-        std::cout << "Line>>" << this->name()
-                  << ": infinite or nan values in the element Y at: " << i
-                  << "," << j << std::endl;
+      if (!Math::isFinite(mY_element.coeff(i, j))) {
+        SPDLOG_LOGGER_ERROR(
+            mSLog,
+            "Line {}: non-finite per-unit admittance {} in element Y({},{})",
+            this->name(), Logger::complexToString(mY_element.coeff(i, j)), i,
+            j);
+        throw InvalidArgumentException();
       }
 
   //set the circuit matrix values

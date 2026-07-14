@@ -41,6 +41,13 @@ set(CIRCUIT_SOURCES
 	Circuits/EMT_RC_split_decoupled_node_DC.cpp
 	Circuits/EMT_RC_split_decoupled_node.cpp
 	Circuits/EMT_RC_split_decoupled_node_Ph3.cpp
+	Circuits/DP_Ph1_SSN_Full_Serial_RLC.cpp
+	Circuits/DP_Ph1_General2TerminalSSN.cpp
+	Circuits/DP_Ph3_R3C1L1CS1.cpp
+	Circuits/DP_Ph3_RLC1VS1_RC_vs_SSN.cpp
+	Circuits/DP_Ph3_R3C1L1CS1_RC_vs_SSN.cpp
+	Circuits/DP_Ph3_R3C1L1CS1_RC_vs_SSN_Fault.cpp
+	Circuits/EMT_Ph3_R3C1L1CS1_RC_vs_SSN_Fault.cpp
 
 	# EMT examples with PF initialization
 	Circuits/EMT_Slack_PiLine_PQLoad_with_PF_Init.cpp
@@ -123,6 +130,7 @@ set(INVERTER_SOURCES
 	Components/DP_Inverter_Grid.cpp
 	Components/DP_Inverter_Grid_Parallel_FreqSplit.cpp
 	Components/DP_Inverter_Grid_Sequential_FreqSplit.cpp
+	Components/EMT_Ph3_GFM_Test.cpp
 )
 
 set(SSN_SOURCES
@@ -130,10 +138,13 @@ Components/EMT_Ph3_GenericTwoTerminalVTypeSSN.cpp
 Components/EMT_Ph3_PiecewiseLinearInductor.cpp
 Components/EMT_Ph3_AvVoltSourceInverterStateSpace.cpp
 Components/EMT_Ph3_2T_I_Type_SSN.cpp
+Components/DP_Ph1_MixedVariableSSN_vs_FixedSSN.cpp
+Components/DP_Ph1_AvVoltSourceInverterStateSpace.cpp
 )
 
 set(STATE_SPACE_SOURCES
 StateSpace/EMT_Ph3_RLC_StateSpaceExtraction.cpp
+StateSpace/DP_Ph1_RLC_StateSpaceExtraction.cpp
 )
 
 # Targets required for tests in the Jupyter Notebooks. This list is only for grouping the (already configured) targets, so every entry

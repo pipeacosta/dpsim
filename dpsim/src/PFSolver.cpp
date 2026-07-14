@@ -58,7 +58,7 @@ void PFSolver::initialize() {
   assignMatrixNodeIndices();
   initializeComponents();
   determinePFBusType();
-  determineNodeBaseVoltages();
+  propagateAndVerifyBaseVoltage();
   composeAdmittanceMatrix();
 
   setUpJacobianStorage();
@@ -146,7 +146,7 @@ void PFSolver::setBaseApparentPower() {
   if (maxPower != 0.)
     mBaseApparentPower = pow(10, 1 + floor(log10(maxPower)));
   else {
-    mBaseApparentPower = 100000000;
+    mBaseApparentPower = mBaseApparentPowerFallback;
     SPDLOG_LOGGER_WARN(mSLog,
                        "No suitable quantity found for setting "
                        "mBaseApparentPower. Using {} VA.",
@@ -156,9 +156,9 @@ void PFSolver::setBaseApparentPower() {
 }
 
 void PFSolver::determinePFBusType() {
-  mPQBusIndices.clear();
-  mPVBusIndices.clear();
-  mVDBusIndices.clear();
+  mPQBuses.clear();
+  mPVBuses.clear();
+  mVDBuses.clear();
 
   SPDLOG_LOGGER_INFO(mSLog, "-- Determine powerflow bus type for each node");
 
@@ -181,6 +181,8 @@ void PFSolver::determinePFBusType() {
           connectedPV = true;
         } else if (gen->mPowerflowBusType == CPS::PowerflowBusType::VD) {
           connectedVD = true;
+        } else if (gen->mPowerflowBusType == CPS::PowerflowBusType::PQ) {
+          connectedPQ = true;
         }
       } else if (std::shared_ptr<CPS::SP::Ph1::NetworkInjection> extnet =
                      std::dynamic_pointer_cast<CPS::SP::Ph1::NetworkInjection>(
@@ -199,48 +201,41 @@ void PFSolver::determinePFBusType() {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: only PQ type component connected -> set as PQ bus",
           node->name());
-      mPQBusIndices.push_back(node->matrixNodeIndex());
       mPQBuses.push_back(node);
     } // no component connected -> set as PQ bus (P & Q will be zero)
     else if (!connectedPV && !connectedPQ && !connectedVD) {
       SPDLOG_LOGGER_INFO(mSLog, "{}: no component connected -> set as PQ bus",
                          node->name());
-      mPQBusIndices.push_back(node->matrixNodeIndex());
       mPQBuses.push_back(node);
     } // only PV type component connected -> set as PV bus
     else if (connectedPV && !connectedPQ && !connectedVD) {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: only PV type component connected -> set as PV bus",
           node->name());
-      mPVBusIndices.push_back(node->matrixNodeIndex());
       mPVBuses.push_back(node);
     } // PV and PQ type component connected -> set as PV bus (TODO: bus type should be modifiable by user afterwards)
     else if (connectedPV && connectedPQ && !connectedVD) {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: PV and PQ type component connected -> set as PV bus",
           node->name());
-      mPVBusIndices.push_back(node->matrixNodeIndex());
       mPVBuses.push_back(node);
     } // only VD type component connected -> set as VD bus
     else if (!connectedPV && !connectedPQ && connectedVD) {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: only VD type component connected -> set as VD bus",
           node->name());
-      mVDBusIndices.push_back(node->matrixNodeIndex());
       mVDBuses.push_back(node);
     } // VD and PV type component connect -> set as VD bus
     else if (connectedPV && !connectedPQ && connectedVD) {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: VD and PV type component connect -> set as VD bus",
           node->name());
-      mVDBusIndices.push_back(node->matrixNodeIndex());
       mVDBuses.push_back(node);
     } // VD, PV and PQ type component connect -> set as VD bus
     else if (connectedPV && connectedPQ && connectedVD) {
       SPDLOG_LOGGER_INFO(
           mSLog, "{}: VD, PV and PQ type component connect -> set as VD bus",
           node->name());
-      mVDBusIndices.push_back(node->matrixNodeIndex());
       mVDBuses.push_back(node);
     } else {
       std::stringstream ss;
@@ -250,17 +245,11 @@ void PFSolver::determinePFBusType() {
     }
   }
 
-  mNumPQBuses = mPQBusIndices.size();
-  mNumPVBuses = mPVBusIndices.size();
-  mNumVDBuses = mVDBusIndices.size();
-  mNumUnknowns = 2 * mNumPQBuses + mNumPVBuses;
+  rebuildBusIndexAggregates();
 
-  // Aggregate PQ bus and PV bus index vectors for easy handling in solver
-  mPQPVBusIndices.reserve(mNumPQBuses + mNumPVBuses);
-  mPQPVBusIndices.insert(mPQPVBusIndices.end(), mPQBusIndices.begin(),
-                         mPQBusIndices.end());
-  mPQPVBusIndices.insert(mPQPVBusIndices.end(), mPVBusIndices.begin(),
-                         mPVBusIndices.end());
+  // Snapshot so each solve can reset before Q-limit switching (solver is reused).
+  mPQBusesOrig = mPQBuses;
+  mPVBusesOrig = mPVBuses;
 
   SPDLOG_LOGGER_INFO(mSLog, "#### Create index vectors for power flow solver:");
   SPDLOG_LOGGER_INFO(mSLog, "PQ Buses: {}", logVector(mPQBusIndices));
@@ -268,89 +257,195 @@ void PFSolver::determinePFBusType() {
   SPDLOG_LOGGER_INFO(mSLog, "VD Buses: {}", logVector(mVDBusIndices));
 }
 
-void PFSolver::determineNodeBaseVoltages() {
+void PFSolver::rebuildBusIndexAggregates() {
+  // Rebuild index vectors from the PQ/PV/VD lists (initial + after each Q-limit switch).
+  mPQBusIndices.clear();
+  mPVBusIndices.clear();
+  mVDBusIndices.clear();
+  for (auto node : mPQBuses)
+    mPQBusIndices.push_back(node->matrixNodeIndex());
+  for (auto node : mPVBuses)
+    mPVBusIndices.push_back(node->matrixNodeIndex());
+  for (auto node : mVDBuses)
+    mVDBusIndices.push_back(node->matrixNodeIndex());
+
+  mNumPQBuses = mPQBusIndices.size();
+  mNumPVBuses = mPVBusIndices.size();
+  mNumVDBuses = mVDBusIndices.size();
+  mNumUnknowns = 2 * mNumPQBuses + mNumPVBuses;
+
+  // Aggregate PQ bus and PV bus index vectors for easy handling in solver
+  mPQPVBusIndices.clear();
+  mPQPVBusIndices.reserve(mNumPQBuses + mNumPVBuses);
+  mPQPVBusIndices.insert(mPQPVBusIndices.end(), mPQBusIndices.begin(),
+                         mPQBusIndices.end());
+  mPQPVBusIndices.insert(mPQPVBusIndices.end(), mPVBusIndices.begin(),
+                         mPVBusIndices.end());
+}
+
+void PFSolver::resetToOriginalClassification() {
+  // Reset to the pre-switching classification so a fresh solve starts clean.
+  mPQBuses = mPQBusesOrig;
+  mPVBuses = mPVBusesOrig;
+  clearReactiveLimitState();
+  reclassifyBuses();
+}
+
+void PFSolver::reclassifyBuses() {
+  // Re-derive index vectors and resize storage; sol_V/sol_D carry over as a warm start.
+  rebuildBusIndexAggregates();
+  setUpJacobianStorage();
+  mX.setZero(mNumUnknowns);
+  mF.setZero(mNumUnknowns);
+}
+
+CPS::Real PFSolver::componentBaseVoltage(CPS::TopologicalPowerComp::Ptr comp,
+                                         CPS::TopologicalNode::Ptr node) {
+  if (auto vsi =
+          std::dynamic_pointer_cast<CPS::SP::Ph1::AvVoltageSourceInverterDQ>(
+              comp))
+    return vsi->getBaseVoltage();
+  if (auto rxline = std::dynamic_pointer_cast<CPS::SP::Ph1::RXLine>(comp))
+    return rxline->getBaseVoltage();
+  if (auto line = std::dynamic_pointer_cast<CPS::SP::Ph1::PiLine>(comp))
+    return line->getBaseVoltage();
+  if (auto trans = std::dynamic_pointer_cast<CPS::SP::Ph1::Transformer>(comp)) {
+    if (trans->terminal(0)->node()->name() == node->name())
+      return trans->getNominalVoltageEnd1();
+    if (trans->terminal(1)->node()->name() == node->name())
+      return trans->getNominalVoltageEnd2();
+    return 0;
+  }
+  if (auto gen =
+          std::dynamic_pointer_cast<CPS::SP::Ph1::SynchronGenerator>(comp))
+    return gen->getBaseVoltage();
+  if (auto load = std::dynamic_pointer_cast<CPS::SP::Ph1::Load>(comp))
+    return load->getNomVoltage();
+  if (auto extnet =
+          std::dynamic_pointer_cast<CPS::SP::Ph1::NetworkInjection>(comp))
+    return extnet->getBaseVoltage();
+  if (auto shunt = std::dynamic_pointer_cast<CPS::SP::Ph1::Shunt>(comp))
+    return shunt->getBaseVoltage();
+  SPDLOG_LOGGER_WARN(mSLog, "Unable to get base voltage at {}", node->name());
+  return 0;
+}
+
+void PFSolver::propagateAndVerifyBaseVoltage() {
 
   SPDLOG_LOGGER_INFO(mSLog, "-- Determine base voltages for each node "
                             "according to connected components");
   mSLog->flush();
 
-  for (auto node : mSystem.mNodes) {
-    CPS::Real baseVoltage_ = 0;
-    for (auto comp : mSystem.mComponentsAtNode[node]) {
-      if (std::shared_ptr<CPS::SP::Ph1::AvVoltageSourceInverterDQ> vsi =
-              std::dynamic_pointer_cast<
-                  CPS::SP::Ph1::AvVoltageSourceInverterDQ>(comp)) {
-        baseVoltage_ = vsi->getNomVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog,
-            "Choose base voltage {}V of {} to convert pu-solution of {}.",
-            baseVoltage_, vsi->name(), node->name());
-        break;
-      } else if (std::shared_ptr<CPS::SP::Ph1::RXLine> rxline =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::RXLine>(comp)) {
-        baseVoltage_ = rxline->getBaseVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog,
-            "Choose base voltage {}V of {} to convert pu-solution of {}.",
-            baseVoltage_, rxline->name(), node->name());
-        break;
-      } else if (std::shared_ptr<CPS::SP::Ph1::PiLine> line =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::PiLine>(comp)) {
-        baseVoltage_ = line->getBaseVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog,
-            "Choose base voltage {}V of {} to convert pu-solution of {}.",
-            baseVoltage_, line->name(), node->name());
-        break;
-      } else if (std::shared_ptr<CPS::SP::Ph1::Transformer> trans =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::Transformer>(
-                         comp)) {
-        if (trans->terminal(0)->node()->name() == node->name()) {
-          baseVoltage_ = trans->getNominalVoltageEnd1();
-          SPDLOG_LOGGER_INFO(
-              mSLog,
-              "Choose base voltage {}V of {} to convert pu-solution of {}.",
-              baseVoltage_, trans->name(), node->name());
-          break;
-        } else if (trans->terminal(1)->node()->name() == node->name()) {
-          baseVoltage_ = trans->getNominalVoltageEnd2();
-          SPDLOG_LOGGER_INFO(
-              mSLog,
-              "Choose base voltage {}V of {} to convert pu-solution of {}.",
-              baseVoltage_, trans->name(), node->name());
-          break;
-        }
-      } else if (std::shared_ptr<CPS::SP::Ph1::SynchronGenerator> gen =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::SynchronGenerator>(
-                         comp)) {
-        baseVoltage_ = gen->getBaseVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog,
-            "Choose base voltage {}V of {} to convert pu-solution of {}.",
-            baseVoltage_, gen->name(), node->name());
-        break;
-      } else if (std::shared_ptr<CPS::SP::Ph1::Load> load =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::Load>(comp)) {
-        baseVoltage_ = load->getNomVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog, "Choose base voltage of {} V to convert pu-solution of {}.",
-            baseVoltage_, load->name(), node->name());
-        break;
-      } else if (std::shared_ptr<CPS::SP::Ph1::NetworkInjection> extnet =
-                     std::dynamic_pointer_cast<CPS::SP::Ph1::NetworkInjection>(
-                         comp)) {
-        baseVoltage_ = extnet->getBaseVoltage();
-        SPDLOG_LOGGER_INFO(
-            mSLog, "Choose base voltage of {}V to convert pu-solution of {}.",
-            baseVoltage_, extnet->name(), node->name());
-        break;
-      } else {
-        SPDLOG_LOGGER_WARN(mSLog, "Unable to get base voltage at {}",
-                           node->name());
-      }
+  // Zones: nodes joined by a line share one voltage level; transformers are boundaries.
+  std::vector<UInt> zoneParent(mSystem.mNodes.size());
+  for (UInt i = 0; i < zoneParent.size(); ++i)
+    zoneParent[i] = i;
+  auto findZone = [&](UInt node) -> UInt {
+    while (zoneParent[node] != node) {
+      zoneParent[node] = zoneParent[zoneParent[node]];
+      node = zoneParent[node];
     }
-    mBaseVoltageAtNode[node] = baseVoltage_;
+    return node;
+  };
+  auto uniteZones = [&](UInt a, UInt b) {
+    zoneParent[findZone(a)] = findZone(b);
+  };
+
+  for (auto comp : mSystem.mComponents) {
+    if (auto line = std::dynamic_pointer_cast<CPS::SP::Ph1::PiLine>(comp))
+      uniteZones(line->node(0)->matrixNodeIndex(),
+                 line->node(1)->matrixNodeIndex());
+    else if (auto rxline =
+                 std::dynamic_pointer_cast<CPS::SP::Ph1::RXLine>(comp))
+      uniteZones(rxline->node(0)->matrixNodeIndex(),
+                 rxline->node(1)->matrixNodeIndex());
   }
+
+  // Generator/Transformer/NetworkInjection/VSI ratings are authoritative;
+  // everything else (incl. Load's solved-voltage proxy) is a looser fallback.
+  std::map<UInt, std::vector<std::pair<CPS::Real, CPS::String>>> authoritative;
+  std::map<UInt, std::vector<std::pair<CPS::Real, CPS::String>>> fallback;
+  std::map<UInt, std::vector<std::shared_ptr<CPS::SP::Ph1::Load>>> zoneLoads;
+  for (auto node : mSystem.mNodes) {
+    UInt zone = findZone(node->matrixNodeIndex());
+    for (auto comp : mSystem.mComponentsAtNode[node]) {
+      if (auto load = std::dynamic_pointer_cast<CPS::SP::Ph1::Load>(comp))
+        zoneLoads[zone].push_back(load);
+
+      CPS::Real voltage = componentBaseVoltage(comp, node);
+      if (std::abs(voltage) <= 1e-6)
+        continue;
+      bool isAuthoritative =
+          std::dynamic_pointer_cast<CPS::SP::Ph1::SynchronGenerator>(comp) ||
+          std::dynamic_pointer_cast<CPS::SP::Ph1::Transformer>(comp) ||
+          std::dynamic_pointer_cast<CPS::SP::Ph1::NetworkInjection>(comp) ||
+          std::dynamic_pointer_cast<CPS::SP::Ph1::AvVoltageSourceInverterDQ>(
+              comp);
+      auto &bucket = isAuthoritative ? authoritative : fallback;
+      bucket[zone].emplace_back(voltage, comp->name());
+    }
+  }
+
+  // Disagreement beyond tolerance means two voltage levels are wired together without a transformer.
+  auto verify =
+      [&](const std::vector<std::pair<CPS::Real, CPS::String>> &candidates,
+          CPS::Real reference, const CPS::String &refSource,
+          CPS::Real tolerance) {
+        for (auto &candidate : candidates) {
+          CPS::Real relDiff =
+              std::abs(candidate.first - reference) /
+              std::max(std::abs(candidate.first), std::abs(reference));
+          if (relDiff > tolerance) {
+            std::stringstream ss;
+            ss << "Base voltage mismatch within one electrical zone (nodes "
+                  "connected without an intervening transformer): "
+               << refSource << " implies " << reference << "V but "
+               << candidate.second << " implies " << candidate.first << "V";
+            throw std::invalid_argument(ss.str());
+          }
+        }
+      };
+
+  std::map<UInt, CPS::Real> zoneVoltage;
+  for (auto &entry : authoritative) {
+    CPS::Real refVoltage = entry.second.front().first;
+    verify(entry.second, refVoltage, entry.second.front().second,
+           mBaseVoltageStrictTolerance);
+    zoneVoltage[entry.first] = refVoltage;
+  }
+  // Fallback checked against the zone's rating, or each other if there is none.
+  for (auto &entry : fallback) {
+    auto it = zoneVoltage.find(entry.first);
+    bool hasAuthoritative = it != zoneVoltage.end();
+    CPS::Real reference =
+        hasAuthoritative ? it->second : entry.second.front().first;
+    const CPS::String &refSource = hasAuthoritative
+                                       ? "the zone's authoritative rating"
+                                       : entry.second.front().second;
+    verify(entry.second, reference, refSource, mBaseVoltageLooseTolerance);
+    if (!hasAuthoritative)
+      zoneVoltage[entry.first] = reference;
+  }
+
+  // Assign the resolved zone voltage to every node in it.
+  for (auto node : mSystem.mNodes) {
+    auto it = zoneVoltage.find(findZone(node->matrixNodeIndex()));
+    mBaseVoltageAtNode[node] = it != zoneVoltage.end() ? it->second : 0;
+  }
+
+  // Sync each Load's nominal voltage to its zone's resolved value.
+  for (auto &entry : zoneVoltage) {
+    auto it = zoneLoads.find(entry.first);
+    if (it == zoneLoads.end())
+      continue;
+    for (auto &load : it->second) {
+      if (std::abs(load->getNomVoltage() - entry.second) > 1e-6)
+        load->setParameters(load->attributeTyped<CPS::Real>("P")->get(),
+                            load->attributeTyped<CPS::Real>("Q")->get(),
+                            entry.second);
+    }
+  }
+
   UInt numMissing = 0;
   UInt numZero = 0;
 
@@ -478,7 +573,7 @@ CPS::Bool PFSolver::checkConvergence() {
   return true;
 }
 
-Bool PFSolver::solvePowerflow() {
+Bool PFSolver::runNewtonRaphson() {
 
   // Reset values for new power flow run
   isConverged = false;
@@ -513,6 +608,36 @@ Bool PFSolver::solvePowerflow() {
     mIterations = i;
   }
   return isConverged;
+}
+
+Bool PFSolver::solvePowerflow() {
+  Bool converged = runNewtonRaphson();
+
+  if (!mEnforceReactiveLimits)
+    return converged;
+
+  // Outer loop: switch PV<->PQ on Q-limit violations, re-solve until no bus switches.
+  Bool settled = false;
+  for (CPS::UInt outer = 0; converged && outer < mMaxOuterIterations; ++outer) {
+    if (!enforceReactiveLimits()) {
+      settled = true;
+      break; // all generators within their reactive limits
+    }
+    reclassifyBuses();
+    converged = runNewtonRaphson();
+  }
+
+  if (converged && !settled) {
+    // Unsettled PV/PQ classification must not look converged to setSolution().
+    SPDLOG_LOGGER_WARN(
+        mSLog,
+        "Q-limit outer loop did not settle within {} iterations; "
+        "PV/PQ classification may still be oscillating",
+        mMaxOuterIterations);
+    isConverged = false;
+    converged = false;
+  }
+  return converged;
 }
 
 void PFSolver::SolveTask::execute(Real time, Int timeStepCount) {
