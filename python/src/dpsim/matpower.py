@@ -442,6 +442,7 @@ class Reader:
                         with_pss=with_pss,
                         with_tg=with_tg,
                         with_avr=with_avr,
+                        model=generator_model,
                     )
 
             # Generators
@@ -689,7 +690,7 @@ class Reader:
         with_pss=True,
         with_tg=True,
         with_avr=True,
-        gen_model=None,
+        model=None,
     ):
         # A bus may carry more than one physical MATPOWER generator (e.g.
         # buses 921, 41826, 42002, 2065, 123499, 123520 in
@@ -716,6 +717,7 @@ class Reader:
                 with_pss=with_pss,
                 with_tg=with_tg,
                 with_avr=with_avr,
+                gen_model=model,
             )
 
     def map_synchronous_machine(
@@ -728,6 +730,7 @@ class Reader:
         with_pss=True,
         with_tg=True,
         with_avr=True,
+        gen_model=None,
     ):
         # gen_row is a single row of self.mpc_gen_data (one physical MATPOWER
         # generator). Multiple generators at the same bus are mapped as
@@ -746,26 +749,6 @@ class Reader:
         gen_q_min = (
             gen_row["Qmin"] * mw_w
         )  # gen reactive power lower limit (gen['Qmin'] in MVAr)
-
-        if len(gen_data) > 1:
-            if (
-                all(gen_data["mBase"] == gen_data["mBase"].values[0])
-                and all(gen_data["Vg"] == gen_data["Vg"].values[0])
-                and all(gen_data["Pmax"] == gen_data["Pmax"].values[0])
-                and all(gen_data["Qmax"] == gen_data["Qmax"].values[0])
-            ):
-                gen_p = (
-                    sum(gen_data["Pg"]) * mw_w
-                )  # gen ini. active power (gen['Pg'] in MVA)
-                gen_q = (
-                    sum(gen_data["Qg"]) * mw_w
-                )  # gen ini. reactive power (gen['Qg'] in MVAr)
-            else:
-                print(
-                    "WARNING: Multiple generators connected to bus {} with different parameters. Using first generator parameters.".format(
-                        bus_index
-                    )
-                )
 
         gen = None
         if self.domain == Domain.PF:
@@ -1271,6 +1254,7 @@ class Reader:
             with_tg=with_tg,
             filter_out_of_service=filter_out_of_service,
             map_pq_bus_generators=map_pq_bus_generators,
+            generator_model=None,
         )
         self.create_dpsim_topology()
 
