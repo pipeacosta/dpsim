@@ -100,6 +100,7 @@ class Reader:
 
         #### Generators #####
         mpc_gen_raw = self.mpc_raw[self.mpc_name]["gen"]
+        mpc_gen_raw = np.asarray(mpc_gen_raw)
 
         gen_data_header = [
             "bus",
@@ -124,6 +125,16 @@ class Reader:
             "ramp_q",
             "apf",
         ]
+
+        if mpc_gen_raw.ndim == 1:
+            mpc_gen_raw = mpc_gen_raw.reshape(1, -1)
+        elif (
+            mpc_gen_raw.ndim == 2
+            and mpc_gen_raw.shape[0] == len(gen_data_header)
+            and mpc_gen_raw.shape[1] == 1
+        ):
+            mpc_gen_raw = mpc_gen_raw.T
+
         self.mpc_gen_data = pd.DataFrame(mpc_gen_raw, columns=gen_data_header)
 
         # scipy.io.loadmat loads all matrix entries as double. Convert specific columns back to int
@@ -202,6 +213,7 @@ class Reader:
         self.mpc_dyn_gen_data = None
         if "gen_dyn" in self.mpc_raw_dyn[self.mpc_dyn_name]:
             mpc_dyn_gen_data = self.mpc_raw_dyn[self.mpc_dyn_name]["gen_dyn"]
+            mpc_dyn_gen_data = np.asarray(mpc_dyn_gen_data)
 
             dyn_gen_data_header = [
                 "bus",
@@ -221,6 +233,16 @@ class Reader:
                 "Xq_t",
                 "Xq_s",
             ]
+
+            if mpc_dyn_gen_data.ndim == 1:
+                mpc_dyn_gen_data = mpc_dyn_gen_data.reshape(1, -1)
+            elif (
+                mpc_dyn_gen_data.ndim == 2
+                and mpc_dyn_gen_data.shape[0] == len(dyn_gen_data_header)
+                and mpc_dyn_gen_data.shape[1] == 1
+            ):
+                mpc_dyn_gen_data = mpc_dyn_gen_data.T
+
             self.mpc_dyn_gen_data = pd.DataFrame(
                 mpc_dyn_gen_data, columns=dyn_gen_data_header
             )
@@ -455,7 +477,7 @@ class Reader:
                     with_pss=with_pss,
                     with_tg=with_tg,
                     with_avr=with_avr,
-                    gen_model=generator_model,
+                    model=generator_model,
                 )
 
                 # check if there is a load connected to PV bus (and create it)
