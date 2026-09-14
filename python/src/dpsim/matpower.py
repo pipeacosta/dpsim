@@ -16,6 +16,7 @@ class Domain(Enum):
 
 class GenModel(Enum):
     IDEAL_VOLTAGE_SOURCE = 1
+    SG_TransientStability = 2
     SG_3ORDER_VBR = 3
     SG_4ORDER_VBR = 4
     SG_5ORDER_VBR = 5
@@ -826,7 +827,7 @@ class Reader:
                 elif self.domain == Domain.SP:
                     raise Exception(
                         "Matpower reader does not support the generator model {} in the SP domain.".format(
-                            gen_model.value
+                            gen_model.name + ": " + str(gen_model.value)
                             if isinstance(gen_model, GenModel)
                             else gen_model
                         )
@@ -847,6 +848,30 @@ class Reader:
                 Lq = self.mpc_dyn_gen_data["Xq"][gen_dyn_row_idx]
                 Lq_t = self.mpc_dyn_gen_data["Xq_t"][gen_dyn_row_idx]
                 Lq_s = self.mpc_dyn_gen_data["Xq_s"][gen_dyn_row_idx]
+                if gen_model == GenModel.SG_TransientStability:
+                    try:
+                        gen = self.dpsimpy_components.SynchronGeneratorTrStab(
+                            gen_name, self.log_level
+                        )
+                        gen.set_standard_parameters_PU(
+                            nom_power=gen_baseS,
+                            nom_volt=gen_baseV,
+                            nom_freq=self.mpc_freq,
+                            Xpd=Ld_t,
+                            inertia=H,
+                        )
+                    except ValueError as e:
+                        raise Exception(
+                            "Matpower reader does not support the generator model {} in the {} domain.".format(
+                                (
+                                    gen_model.name + ": " + str(gen_model.value)
+                                    if isinstance(gen_model, GenModel)
+                                    else gen_model
+                                ),
+                                self.domain.name,
+                            )
+                        ) from e
+
                 if gen_model == GenModel.SG_3ORDER_VBR:
                     gen = self.dpsimpy_components.SynchronGenerator3OrderVBR(
                         gen_name, self.log_level
