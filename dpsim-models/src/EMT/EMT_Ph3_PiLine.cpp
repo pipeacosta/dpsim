@@ -44,6 +44,10 @@ void EMT::Ph3::PiLine::createSubComponents() {
   **mParallelCond =
       ((**mParallelCond)(0, 0) > 0) ? **mParallelCond : defaultParallelCond;
 
+  Matrix defaultSeriesRes = Matrix::Zero(3, 3);
+  defaultSeriesRes << 1e-6, 0, 0, 0, 1e-6, 0, 0, 0, 1e-6;
+  **mSeriesRes = ((**mSeriesRes)(0, 0) > 0) ? **mSeriesRes : defaultSeriesRes;
+
   // Create series sub components
   mSubSeriesResistor =
       std::make_shared<EMT::Ph3::Resistor>(**mName + "_res", mLogLevel);
