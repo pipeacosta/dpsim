@@ -824,6 +824,7 @@ class Reader:
                     gen = self.dpsimpy_components.SynchronGeneratorIdeal(
                         gen_name, self.log_level
                     )
+                    # gen.set_parameters(gen_v, gen_baseV, gen_p, gen_q)
                 elif self.domain == Domain.SP:
                     raise Exception(
                         "Matpower reader does not support the generator model {} in the SP domain.".format(
@@ -1282,6 +1283,7 @@ class Reader:
         with_tg=True,
         filter_out_of_service=False,
         map_pq_bus_generators=True,
+        log_level=dpsimpy.LogLevel.info,
     ):
         """
         Read mpc files and create DPsim topology
@@ -1302,6 +1304,7 @@ class Reader:
             filter_out_of_service=filter_out_of_service,
             map_pq_bus_generators=map_pq_bus_generators,
             generator_model=None,
+            log_level=log_level,
         )
         self.create_dpsim_topology()
 
