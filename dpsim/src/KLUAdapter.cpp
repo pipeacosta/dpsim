@@ -6,11 +6,50 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *********************************************************************************/
 
+#include <sstream>
+#include <stdexcept>
+
 #include <dpsim/KLUAdapter.h>
 
 using namespace DPsim;
 
+namespace {
+
+const char *kluStatusString(int status) {
+  switch (status) {
+  case KLU_OK:
+    return "KLU_OK";
+  case KLU_SINGULAR:
+    return "KLU_SINGULAR";
+  case KLU_OUT_OF_MEMORY:
+    return "KLU_OUT_OF_MEMORY";
+  case KLU_INVALID:
+    return "KLU_INVALID";
+  case KLU_TOO_LARGE:
+    return "KLU_TOO_LARGE";
+  default:
+    return "KLU_UNKNOWN_STATUS";
+  }
+}
+
+[[noreturn]] void throwKLUError(const char *operation,
+                                const klu_common &common) {
+  std::ostringstream msg;
+
+  msg << "KLU " << operation << " failed"
+      << ": status=" << common.status << " ("
+      << kluStatusString(common.status) << ")"
+      << ", structural_rank=" << common.structural_rank
+      << ", numerical_rank=" << common.numerical_rank
+      << ", singular_col=" << common.singular_col;
+
+  throw std::runtime_error(msg.str());
+}
+
+} // namespace
+
 namespace DPsim {
+
 KLUAdapter::~KLUAdapter() {
   if (mSymbolic)
     klu_free_symbolic(&mSymbolic, &mCommon);
@@ -20,11 +59,17 @@ KLUAdapter::~KLUAdapter() {
 }
 
 KLUAdapter::KLUAdapter() {
-  klu_defaults(&mCommon);
+  if (!klu_defaults(&mCommon)) {
+    throw std::runtime_error("KLU: klu_defaults() failed.");
+  }
+
+  // Never continue with a singular factorization. For an MNA solve a
+  // singular matrix is a hard error and must not silently produce an
+  // invalid solution vector.
+  mCommon.halt_if_singular = 1;
 
   // NOTE: klu_defaults should already set the preordering methods correctly.
-  // It is repeated here in case this is altered in SuiteSparse at some point
-
+  // It is repeated here in case this is altered in SuiteSparse at some point.
   mCommon.scale = 2;
   mPreordering = AMD_ORDERING;
   mCommon.btf = 1;
@@ -42,6 +87,7 @@ void KLUAdapter::preprocessing(
     std::vector<std::pair<UInt, UInt>> &listVariableSystemMatrixEntries) {
   if (mSymbolic) {
     klu_free_symbolic(&mSymbolic, &mCommon);
+    mSymbolic = nullptr;
   }
 
   const Int n = Eigen::internal::convert_index<Int>(systemMatrix.rows());
@@ -61,12 +107,17 @@ void KLUAdapter::preprocessing(
     mVaryingColumns.push_back(changedEntry.second);
   }
 
-  // This call also works if mVaryingColumns, mVaryingRows are empty
+  // This call also works if mVaryingColumns / mVaryingRows are empty.
   int *colPtr = mVaryingColumns.empty() ? nullptr : &mVaryingColumns[0];
   int *rowPtr = mVaryingRows.empty() ? nullptr : &mVaryingRows[0];
 
-  mSymbolic = klu_analyze_partial(n, Ap, Ai, colPtr, rowPtr, varying_entries,
-                                  mPreordering, &mCommon);
+  mSymbolic =
+      klu_analyze_partial(n, Ap, Ai, colPtr, rowPtr, varying_entries,
+                          mPreordering, &mCommon);
+
+  if (mSymbolic == nullptr || mCommon.status != KLU_OK) {
+    throwKLUError("symbolic analysis", mCommon);
+  }
 
   if (mVaryingColumns.empty()) {
     SPDLOG_LOGGER_INFO(
@@ -79,8 +130,14 @@ void KLUAdapter::preprocessing(
         "KLUAdapter: No variable ROW entries passed to klu_analyze_partial");
   }
 
-  /* Store non-zero value of current preprocessed matrix. only used until
-   * to-do in refactorize-function is resolved. Can be removed then.
+  SPDLOG_LOGGER_DEBUG(
+      mSLog,
+      "KLU symbolic analysis successful: structural_rank={}, "
+      "numerical_rank={}, singular_col={}",
+      mCommon.structural_rank, mCommon.numerical_rank, mCommon.singular_col);
+
+  /* Store non-zero value of current preprocessed matrix. Only used until
+   * TODO in refactorize() is resolved.
    */
   nnz = Eigen::internal::convert_index<Int>(systemMatrix.nonZeros());
 }
@@ -88,6 +145,12 @@ void KLUAdapter::preprocessing(
 void KLUAdapter::factorize(SparseMatrix &systemMatrix) {
   if (mNumeric) {
     klu_free_numeric(&mNumeric, &mCommon);
+    mNumeric = nullptr;
+  }
+
+  if (!mSymbolic) {
+    throw std::runtime_error(
+        "KLU factorization requested without symbolic analysis.");
   }
 
   auto Ap = Eigen::internal::convert_index<Int *>(systemMatrix.outerIndexPtr());
@@ -96,11 +159,23 @@ void KLUAdapter::factorize(SparseMatrix &systemMatrix) {
 
   mNumeric = klu_factor(Ap, Ai, Ax, mSymbolic, &mCommon);
 
+  // KLU_SINGULAR is documented as a warning by KLU, but for DPsim's MNA
+  // system it is fatal: the linear system cannot be solved uniquely.
+  if (mNumeric == nullptr || mCommon.status != KLU_OK) {
+    throwKLUError("numeric factorization", mCommon);
+  }
+
+  SPDLOG_LOGGER_DEBUG(
+      mSLog,
+      "KLU factorization successful: structural_rank={}, numerical_rank={}, "
+      "singular_col={}",
+      mCommon.structural_rank, mCommon.numerical_rank, mCommon.singular_col);
+
   Int varying_entries =
       Eigen::internal::convert_index<Int>(mChangedEntries.size());
 
-  /* Make sure that factorization path is not computed if there are no varying entries.
-   * Doing so should not be a problem, but it is safer to do it this way.
+  /* Make sure that factorization path is not computed if there are no varying
+   * entries. Doing so should not be a problem, but it is safer this way.
    */
   if (!(mVaryingColumns.empty()) && !(mVaryingRows.empty())) {
     if (mPartialRefactorizationMethod ==
@@ -108,26 +183,43 @@ void KLUAdapter::factorize(SparseMatrix &systemMatrix) {
       klu_compute_path(mSymbolic, mNumeric, &mCommon, Ap, Ai,
                        &mVaryingColumns[0], &mVaryingRows[0], varying_entries);
     } else if (mPartialRefactorizationMethod ==
-               DPsim::PARTIAL_REFACTORIZATION_METHOD::REFACTORIZATION_RESTART) {
+               DPsim::PARTIAL_REFACTORIZATION_METHOD::
+                   REFACTORIZATION_RESTART) {
       klu_determine_start(mSymbolic, mNumeric, &mCommon, Ap, Ai,
                           &mVaryingColumns[0], &mVaryingRows[0],
                           varying_entries);
+    }
+
+    if (mCommon.status != KLU_OK) {
+      throwKLUError("factorization-path setup", mCommon);
     }
   }
 }
 
 void KLUAdapter::refactorize(SparseMatrix &systemMatrix) {
-  // TODO: Remove if-else when zero<->non-zero issue during matrix stamping has been fixed. Also remove in partialRefactorize then.
+  // TODO: Remove if-else when zero<->non-zero issue during matrix stamping
+  // has been fixed. Also remove in partialRefactorize then.
   if (systemMatrix.nonZeros() != nnz) {
     preprocessing(systemMatrix, mChangedEntries);
     factorize(systemMatrix);
   } else {
+    if (!mSymbolic || !mNumeric) {
+      throw std::runtime_error(
+          "KLU refactorization requested without valid factorization.");
+    }
+
     auto Ap =
         Eigen::internal::convert_index<Int *>(systemMatrix.outerIndexPtr());
     auto Ai =
         Eigen::internal::convert_index<Int *>(systemMatrix.innerIndexPtr());
     auto Ax = Eigen::internal::convert_index<Real *>(systemMatrix.valuePtr());
-    klu_refactor(Ap, Ai, Ax, mSymbolic, mNumeric, &mCommon);
+
+    const int success =
+        klu_refactor(Ap, Ai, Ax, mSymbolic, mNumeric, &mCommon);
+
+    if (!success || mCommon.status != KLU_OK) {
+      throwKLUError("refactorization", mCommon);
+    }
   }
 }
 
@@ -142,6 +234,12 @@ void KLUAdapter::partialRefactorize(
              (mVaryingColumns.empty() || mVaryingRows.empty())) {
     factorize(systemMatrix);
   } else {
+    if (!mSymbolic || !mNumeric) {
+      throw std::runtime_error(
+          "KLU partial refactorization requested without valid "
+          "factorization.");
+    }
+
     auto Ap =
         Eigen::internal::convert_index<Int *>(systemMatrix.outerIndexPtr());
     auto Ai =
@@ -156,36 +254,61 @@ void KLUAdapter::partialRefactorize(
       klu_partial_refactorization_restart(Ap, Ai, Ax, mSymbolic, mNumeric,
                                           &mCommon);
     } else {
-      klu_refactor(Ap, Ai, Ax, mSymbolic, mNumeric, &mCommon);
+      const int success =
+          klu_refactor(Ap, Ai, Ax, mSymbolic, mNumeric, &mCommon);
+
+      if (!success || mCommon.status != KLU_OK) {
+        throwKLUError("partial refactorization", mCommon);
+      }
+
+      return;
     }
 
     if (mCommon.status == KLU_PIVOT_FAULT) {
-      /* pivot became too small => fully factorize again */
+      // Pivot became too small => fully factorize again.
       mPivotFaults++;
       factorize(systemMatrix);
+      return;
+    }
+
+    if (mCommon.status != KLU_OK) {
+      throwKLUError("partial refactorization", mCommon);
     }
   }
 }
 
 Matrix KLUAdapter::solve(Matrix &rightSideVector) {
-  // TODO: this calls malloc, which is not allowed in the simulation loop
+  if (!mSymbolic || !mNumeric) {
+    throw std::runtime_error(
+        "KLU solve requested without valid LU factorization.");
+  }
+
+  // TODO: this calls malloc, which is not allowed in the simulation loop.
   // We should preallocate this buffer.
   Matrix x = rightSideVector;
 
-  /* Number of right hands sides
-   * usually one, KLU can handle multiple right hand sides.
+  /* Number of right hand sides.
+   * Usually one; KLU can handle multiple right hand sides.
    */
   Int rhsCols = Eigen::internal::convert_index<Int>(rightSideVector.cols());
 
   // Leading dimension, also called "n".
   Int rhsRows = Eigen::internal::convert_index<Int>(rightSideVector.rows());
 
-  /* tsolve refers to transpose solve. Input matrix is stored in compressed row format,
-   * KLU operates on compressed column format. This way, the transpose of the matrix is factored.
-   * This has to be taken into account only here during right-hand solving.
+  /* tsolve refers to transpose solve. Input matrix is stored in compressed row
+   * format, while KLU operates on compressed column format. This way, the
+   * transpose of the matrix is factored, which has to be accounted for here.
    */
-  klu_tsolve(mSymbolic, mNumeric, rhsRows, rhsCols,
-             x.const_cast_derived().data(), &mCommon);
+  const int success =
+      klu_tsolve(mSymbolic, mNumeric, rhsRows, rhsCols, x.data(), &mCommon);
+
+  if (!success || mCommon.status != KLU_OK) {
+    throwKLUError("solve", mCommon);
+  }
+
+  if (!x.allFinite()) {
+    throw std::runtime_error("KLU solve produced NaN or Inf values.");
+  }
 
   return x;
 }
@@ -201,8 +324,9 @@ void KLUAdapter::printMatrixMarket(SparseMatrix &matrix, int counter) const {
 
   std::ofstream ofs;
   ofs.open(outputName);
-  /* TODO: Add logger to DirectLinearSolver to use libfmt's more powerful logging tools.
-   * Then also move matrix printing (of LU matrices) here in order to avoid C-level printing.
+  /* TODO: Add logger to DirectLinearSolver to use libfmt's more powerful
+   * logging tools. Then also move matrix printing (of LU matrices) here in
+   * order to avoid C-level printing.
    */
   ofs.precision(14);
   ofs << "%%MatrixMarket matrix coordinate real general" << std::endl;
@@ -233,7 +357,7 @@ void KLUAdapter::applyConfiguration() {
   SPDLOG_LOGGER_INFO(mSLog, "Matrix is scaled using " +
                                 mConfiguration.getScalingMethodString());
 
-  // TODO: Implement support for COLAMD (modifiy SuiteSparse)
+  // TODO: Implement support for COLAMD (modify SuiteSparse).
   switch (mConfiguration.getFillInReductionMethod()) {
   case FILL_IN_REDUCTION_METHOD::AMD:
     mPreordering = AMD_ORDERING;
@@ -252,7 +376,8 @@ void KLUAdapter::applyConfiguration() {
                      "Matrix is fill reduced with " +
                          mConfiguration.getFillInReductionMethodString());
 
-  // NOTE: in case more partial refactorization methods are defined/developed, that are not implemented in KLU, this assigment would be invalid
+  // NOTE: in case more partial refactorization methods are defined/developed,
+  // that are not implemented in KLU, this assignment would be invalid.
   mPartialRefactorizationMethod =
       mConfiguration.getPartialRefactorizationMethod();
 
@@ -274,4 +399,5 @@ void KLUAdapter::applyConfiguration() {
   SPDLOG_LOGGER_INFO(mSLog,
                      "Matrix is permuted " + mConfiguration.getBTFString());
 }
+
 } // namespace DPsim

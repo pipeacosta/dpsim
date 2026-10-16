@@ -10,6 +10,7 @@
 #include <dpsim/MNASolver.h>
 #include <dpsim/SequentialScheduler.h>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -132,6 +133,7 @@ template <typename VarType> void MnaSolver<VarType>::initialize() {
       };
   for (auto comp : allMNAComps)
     createSubComponentsRec(comp);
+
   // These steps complete the network information.
   collectVirtualNodes();
   assignMatrixNodeIndices();
@@ -247,6 +249,7 @@ template <> void MnaSolver<Complex>::initializeComponents() {
       if (stamp.size() != 0)
         mRightVectorStamps.push_back(&stamp);
     }
+
     // Initialize nodes
     for (UInt nodeIdx = 0; nodeIdx < mNodes.size(); ++nodeIdx) {
       mNodes[nodeIdx]->mnaInitializeHarm(mLeftSideVectorHarm);
@@ -347,7 +350,9 @@ void MnaSolver<VarType>::initializeSystemWithVariableMatrix() {
   for (auto varElem : mVariableComps)
     for (auto varEntry : varElem->mVariableSystemMatrixEntries)
       mListVariableSystemMatrixEntries.push_back(varEntry);
+
   SPDLOG_LOGGER_INFO(mSLog, "List of index pairs of varying matrix entries: ");
+
   for (auto indexPair : mListVariableSystemMatrixEntries)
     SPDLOG_LOGGER_INFO(mSLog, "({}, {})", indexPair.first, indexPair.second);
 
@@ -523,30 +528,66 @@ template <typename VarType> void MnaSolver<VarType>::identifyTopologyObjects() {
 
 template <typename VarType> void MnaSolver<VarType>::assignMatrixNodeIndices() {
   UInt matrixNodeIndexIdx = 0;
+
   for (UInt idx = 0; idx < mNodes.size(); ++idx) {
     mNodes[idx]->setMatrixNodeIndex(0, matrixNodeIndexIdx);
+
+    // Targeted diagnostic for the complex matrix-node index associated with
+    // KLU singular_col=2691 for the current 3570x3570 SP MNA matrix.
+    // 2691 - 3570/2 = 906.
+    //
+    // Print a small neighborhood rather than enabling verbose DPsim logging.
+    if (matrixNodeIndexIdx >= 900 && matrixNodeIndexIdx <= 912) {
+      std::cerr << "[MNA INDEX DEBUG] matrix index " << matrixNodeIndexIdx
+                << " -> node " << mNodes[idx]->name()
+                << " (node-list index " << idx << ")" << std::endl;
+    }
+
     if (mNodes[idx]->phaseType() == CPS::PhaseType::DC)
       SPDLOG_LOGGER_INFO(mSLog, "Assigned index {} to DC node {}",
                          matrixNodeIndexIdx, idx);
     else
       SPDLOG_LOGGER_INFO(mSLog, "Assigned index {} to phase A of node {}",
                          matrixNodeIndexIdx, idx);
+
     ++matrixNodeIndexIdx;
+
     if (mNodes[idx]->phaseType() == CPS::PhaseType::ABC) {
       mNodes[idx]->setMatrixNodeIndex(1, matrixNodeIndexIdx);
+
+      if (matrixNodeIndexIdx >= 900 && matrixNodeIndexIdx <= 912) {
+        std::cerr << "[MNA INDEX DEBUG] matrix index " << matrixNodeIndexIdx
+                  << " -> node " << mNodes[idx]->name()
+                  << " phase B (node-list index " << idx << ")"
+                  << std::endl;
+      }
+
       SPDLOG_LOGGER_INFO(mSLog, "Assigned index {} to phase B of node {}",
                          matrixNodeIndexIdx, idx);
+
       ++matrixNodeIndexIdx;
+
       mNodes[idx]->setMatrixNodeIndex(2, matrixNodeIndexIdx);
+
+      if (matrixNodeIndexIdx >= 900 && matrixNodeIndexIdx <= 912) {
+        std::cerr << "[MNA INDEX DEBUG] matrix index " << matrixNodeIndexIdx
+                  << " -> node " << mNodes[idx]->name()
+                  << " phase C (node-list index " << idx << ")"
+                  << std::endl;
+      }
+
       SPDLOG_LOGGER_INFO(mSLog, "Assigned index {} to phase C of node {}",
                          matrixNodeIndexIdx, idx);
+
       ++matrixNodeIndexIdx;
     }
-    // This should be true when the final network node is reached, not considering virtual nodes
+
+    // This should be true when the final network node is reached, not
+    // considering virtual nodes.
     if (idx == mNumNetNodes - 1)
       mNumNetMatrixNodeIndices = matrixNodeIndexIdx;
   }
-  // Total number of network nodes including virtual nodes is matrixNodeIndexIdx + 1, which is why the variable is incremented after assignment
+
   mNumMatrixNodeIndices = matrixNodeIndexIdx;
   mNumVirtualMatrixNodeIndices =
       mNumMatrixNodeIndices - mNumNetMatrixNodeIndices;
@@ -561,6 +602,8 @@ template <typename VarType> void MnaSolver<VarType>::assignMatrixNodeIndices() {
                      mNumNetMatrixNodeIndices);
   SPDLOG_LOGGER_INFO(mSLog, "Number of simulation nodes: {:d}",
                      mNumMatrixNodeIndices);
+  SPDLOG_LOGGER_INFO(mSLog, "Number of virtual simulation nodes: {:d}",
+                     mNumVirtualMatrixNodeIndices);
   SPDLOG_LOGGER_INFO(mSLog, "Number of harmonic simulation nodes: {:d}",
                      mNumHarmMatrixNodeIndices);
 }
@@ -589,6 +632,7 @@ template <> void MnaSolver<Complex>::createEmptyVectors() {
 template <typename VarType> void MnaSolver<VarType>::collectVirtualNodes() {
   // We have not added virtual nodes yet so the list has only network nodes
   mNumNetNodes = (UInt)mNodes.size();
+
   // virtual nodes are placed after network nodes
   UInt virtualNode = mNumNetNodes - 1;
 
@@ -612,17 +656,21 @@ template <typename VarType> void MnaSolver<VarType>::collectVirtualNodes() {
       for (auto pSubComp : pComp->subComponents()) {
         for (UInt node = 0; node < pSubComp->virtualNodesNumber(); ++node) {
           auto vnode = pSubComp->virtualNode(node);
+
           // Skip if already registered (e.g. parent reused its VN via
           // setVirtualNodeAt).
           bool alreadyRegistered = false;
+
           for (auto registeredNode : mNodes) {
             if (registeredNode == vnode) {
               alreadyRegistered = true;
               break;
             }
           }
+
           if (alreadyRegistered)
             continue;
+
           mNodes.push_back(vnode);
           SPDLOG_LOGGER_INFO(mSLog, "Collected virtual node {} of {}", node,
                              pSubComp->name());
@@ -651,6 +699,7 @@ template <typename VarType> void MnaSolver<VarType>::collectVirtualNodes() {
   // Update node number to create matrices and vectors
   mNumNodes = (UInt)mNodes.size();
   mNumVirtualNodes = mNumNodes - mNumNetNodes;
+
   SPDLOG_LOGGER_INFO(mSLog, "Created virtual nodes:");
   SPDLOG_LOGGER_INFO(mSLog, "Number of network nodes: {:d}", mNumNetNodes);
   SPDLOG_LOGGER_INFO(mSLog, "Number of network and virtual nodes: {:d}",
@@ -664,6 +713,7 @@ void MnaSolver<VarType>::steadyStateInitialization() {
   DataLogger initLeftVectorLog(mName + "_InitLeftVector",
                                mLogLevel != CPS::Logger::Level::off);
   initLeftVectorLog.start();
+
   DataLogger initRightVectorLog(mName + "_InitRightVector",
                                 mLogLevel != CPS::Logger::Level::off);
   initRightVectorLog.start();
@@ -689,10 +739,12 @@ void MnaSolver<VarType>::steadyStateInitialization() {
 
   for (auto comp : mSystem.mComponents) {
     auto powerComp = std::dynamic_pointer_cast<CPS::TopologicalPowerComp>(comp);
+
     if (powerComp)
       powerComp->setBehaviour(initBehaviourPowerComps);
 
     auto sigComp = std::dynamic_pointer_cast<CPS::SimSignalComp>(comp);
+
     if (sigComp)
       sigComp->setBehaviour(initBehaviourSignalComps);
   }
@@ -709,17 +761,20 @@ void MnaSolver<VarType>::steadyStateInitialization() {
     for (auto task : node->mnaTasks())
       tasks.push_back(task);
   }
+
   for (auto comp : mMNAComponents) {
     for (auto task : comp->mnaTasks()) {
       tasks.push_back(task);
     }
   }
+
   // TODO signal components should be moved out of MNA solver
   for (auto comp : mSimSignalComps) {
     for (auto task : comp->getTasks()) {
       tasks.push_back(task);
     }
   }
+
   tasks.push_back(createSolveTask());
 
   sched.resolveDeps(tasks, inEdges, outEdges);
@@ -748,6 +803,7 @@ void MnaSolver<VarType>::steadyStateInitialization() {
     prevLeftSideVector = **mLeftSideVector;
     maxDiff = diff.lpNorm<Eigen::Infinity>();
     max = (**mLeftSideVector).lpNorm<Eigen::Infinity>();
+
     // If difference is smaller than some epsilon, break
     if ((maxDiff / max) < mSteadStIniAccLimit)
       break;
@@ -770,21 +826,25 @@ template <typename VarType> Task::List MnaSolver<VarType>::getTasks() {
       l.push_back(task);
     }
   }
+
   for (auto comp : mMNAIntfSwitches) {
     for (auto task : comp->mnaTasks()) {
       l.push_back(task);
     }
   }
+
   for (auto node : mNodes) {
     for (auto task : node->mnaTasks())
       l.push_back(task);
   }
+
   // TODO signal components should be moved out of MNA solver
   for (auto comp : mSimSignalComps) {
     for (auto task : comp->getTasks()) {
       l.push_back(task);
     }
   }
+
   if (mFrequencyParallel) {
     for (UInt i = 0; i < mSystem.mFrequencies.size(); ++i)
       l.push_back(createSolveTaskHarm(i));
@@ -793,17 +853,22 @@ template <typename VarType> Task::List MnaSolver<VarType>::getTasks() {
       for (auto task : comp->mnaTasks())
         l.push_back(task);
     }
+
     l.push_back(createSolveTaskRecomp());
+
     if (mStateSpaceExtraction) {
       l.push_back(createStateSpaceExtractionTask());
     }
   } else {
     l.push_back(createSolveTask());
+
     if (mStateSpaceExtraction) {
       l.push_back(createStateSpaceExtractionTask());
     }
+
     l.push_back(createLogTask());
   }
+
   return l;
 }
 
