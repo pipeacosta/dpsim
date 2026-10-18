@@ -165,6 +165,14 @@ void SystemTopology::initWithPowerflow(const SystemTopology &systemPF,
     const Bool mapsToGroundedTwoTerminalLoad = (pfLoad || pfShunt) &&
                                                pfTerminals.size() == 1 &&
                                                targetTerminalCount == 2;
+
+    if (compPF->name() == "load4") {
+      std::cerr << "[PF2EMT load4] pfLoad=" << static_cast<bool>(pfLoad)
+                << " realComp=" << static_cast<bool>(realComp)
+                << " pfTerminals=" << pfTerminals.size()
+                << " targetTerminals=" << targetTerminalCount
+                << std::endl;
+    }
     if (targetTerminalCount != pfTerminals.size() &&
         !mapsToGroundedTwoTerminalLoad)
       continue;
@@ -196,10 +204,30 @@ void SystemTopology::initWithPowerflow(const SystemTopology &systemPF,
             -std::norm(voltage) *
             Complex(**pfShunt->mConductance, -(**pfShunt->mSusceptance));
       }
+      if (compPF->name() == "load4") {
+        std::cerr << "[PF2EMT load4] loadPower="
+                  << (pfLoad ? Complex(**pfLoad->mActivePower,
+                                      **pfLoad->mReactivePower)
+                             : Complex(0.0, 0.0))
+                  << " terminalIdx=" << terminalIdx
+                  << " terminalPower=" << terminalPower
+                  << std::endl;
+      }
+
       if (complexComp)
         complexComp->terminals()[terminalIdx]->setPower(terminalPower);
       else
         realComp->terminals()[terminalIdx]->setPower(terminalPower);
+
+      if (compPF->name() == "load4" && realComp) {
+        std::cerr << "[PF2EMT load4] after set:"
+                  << " S0=" << realComp->terminals()[0]->singlePower();
+
+        if (realComp->terminals().size() > 1)
+          std::cerr << " S1=" << realComp->terminals()[1]->singlePower();
+
+        std::cerr << std::endl;
+      }
     }
   }
 }

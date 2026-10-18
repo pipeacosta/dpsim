@@ -610,10 +610,14 @@ void addEMTPh3Components(py::module_ mEMTPh3) {
                                            py::multiple_inheritance())
       .def(py::init<std::string, CPS::Logger::Level>(), "name"_a,
            "loglevel"_a = CPS::Logger::Level::off)
-      .def("set_standard_parameters_pu",
+      .def("set_standard_parameters_PU",
            &CPS::EMT::Ph3::SynchronGeneratorTrStab::setStandardParametersPU,
            "nom_power"_a, "nom_volt"_a, "nom_freq"_a, "Xpd"_a, "inertia"_a,
            "Rs"_a = 0.0, "D"_a = 0.0)
+      .def("set_initial_values",
+           &CPS::EMT::Ph3::SynchronGeneratorTrStab::setInitialValues,
+           "electrical_power"_a, "mechanical_power"_a)
+
       .def("set_initial_values",
            &CPS::EMT::Ph3::SynchronGeneratorTrStab::setInitialValues,
            "electrical_power"_a, "mechanical_power"_a)

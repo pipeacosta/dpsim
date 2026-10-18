@@ -61,10 +61,25 @@ void EMT::Ph3::CurrentSource::initializeFromNodesAndTerminals(Real frequency) {
     Complex v_ref = initialSingleVoltage(1) - initialSingleVoltage(0);
     Complex s_ref = terminal(1)->singlePower() - terminal(0)->singlePower();
 
+    if (**mName == "load4") {
+      std::cerr << "[CS INIT load4]"
+                << " Vref=" << v_ref
+                << " S0=" << terminal(0)->singlePower()
+                << " S1=" << terminal(1)->singlePower()
+                << " Sref=" << s_ref
+                << std::endl;
+    }
+
     // Current flowing from T1 to T0 (rms value)
     Complex i_ref = std::conj(s_ref / v_ref / sqrt(3.));
 
     **mCurrentRef = CPS::Math::singlePhaseVariableToThreePhase(i_ref);
+
+    if (**mName == "load4") {
+      std::cerr << "[CS INIT load4] IrefA=" << i_ref
+                << " |IrefA|=" << std::abs(i_ref)
+                << std::endl;
+    }
     mSrcFreq->setReference(mSrcSig->attributeTyped<Real>("freq"));
 
     SPDLOG_LOGGER_INFO(mSLog,

@@ -1060,40 +1060,77 @@ class Reader:
     def map_energy_consumer(
         self, index, bus_index, load_name=None, bus_type=dpsimpy.PowerflowBusType.PQ
     ):
-        # check if there is a load connected to PV bus
+        # MATPOWER convention: positive Pd/Qd denotes demand. A negative Pd is
+        # therefore an active-power injection (for example embedded generation),
+        # not a passive load.
         load_p = self.mpc_bus_data.at[index, "Pd"] * mw_w
         load_q = self.mpc_bus_data.at[index, "Qd"] * mw_w
+
+        # Do not create zero-power dynamic loads. Keep the historical PF behavior
+        # for PQ buses because the PF topology is also used as the operating-point
+        # source for dynamic initialization.
         if bus_type != dpsimpy.PowerflowBusType.PQ or self.domain != Domain.PF:
             if abs(load_p) < 1e-12 and abs(load_q) < 1e-12:
                 return
 
-        if load_name == None:
-            # increment number of loads by 1
-            self.loads_count += 1
-            load_name = "load%s" % self.loads_count
+        if load_name is None:
+            # Use a deterministic physical identifier so the same MATPOWER load
+            # has the same component name in PF, DP, SP and EMT topologies.
+            # SystemTopology::initWithPowerflow() matches components by name when
+            # transferring the solved operating point, so sequential load numbers
+            # are unsafe when one domain skips zero-power loads.
+            load_name = "Load_N{}".format(bus_index)
 
-        # get relevant data
         load_baseV = self.mpc_bus_data.at[index, "baseKV"] * kv_v
+        bus_node = self.dpsimpy_busses_dict[self.get_node_name(bus_index)]
 
-        # create dpsim components
-        load = None
+        # IMPORTANT: never map negative Pd to an EMT RXLoad. RXLoad converts the
+        # specified active power into an equivalent resistance. For Pd < 0 this
+        # becomes a negative resistance and introduces an active unstable element
+        # into the EMT network.
+        #
+        # Preserve the MATPOWER injection instead with a three-phase current source.
+        # No explicit current setpoint is assigned here: the source keeps the same
+        # component name as the PF Load, so initWithPowerflow() can transfer the
+        # solved PF terminal power and the CurrentSource can initialize its current
+        # from that operating point. Qd is therefore preserved as part of the same
+        # complex-power operating point.
+        if self.domain == Domain.EMT and load_p < 0.0:
+            if not hasattr(self.dpsimpy_components, "CurrentSource"):
+                raise RuntimeError(
+                    "Negative MATPOWER Pd encountered at bus {} ({} MW), but "
+                    "the EMT CurrentSource model is unavailable. Refusing to map "
+                    "the injection to RXLoad because that would create a negative "
+                    "resistance.".format(bus_index, load_p * w_mw)
+                )
+
+            source = self.dpsimpy_components.CurrentSource(load_name, self.log_level)
+            self.dpsimpy_comp_dict[load_name] = [source]
+            self.dpsimpy_comp_dict[load_name].append(
+                [self.dpsimpy_components.SimNode.gnd, bus_node]
+            )
+            return
+
+        # Normal load mapping. Positive Pd remains unchanged from the original
+        # importer behavior.
         if self.domain in [Domain.PF, Domain.SP]:
             load = self.dpsimpy_components.Load(load_name, self.log_level)
         else:
             load = self.dpsimpy_components.RXLoad(load_name, self.log_level)
 
         if self.domain == Domain.EMT:
+            # MATPOWER Pd/Qd are total balanced three-phase powers. RXLoad expects
+            # one value per phase in the three-phase parameter matrix.
             load_p = dpsimpy.Math.single_phase_parameter_to_three_phase(load_p / 3)
             load_q = dpsimpy.Math.single_phase_parameter_to_three_phase(load_q / 3)
+
         load.set_parameters(load_p, load_q, load_baseV)
 
         if self.domain == Domain.PF and bus_type == dpsimpy.PowerflowBusType.PQ:
             load.modify_power_flow_bus_type(bus_type)
 
         self.dpsimpy_comp_dict[load_name] = [load]
-        self.dpsimpy_comp_dict[load_name].append(
-            [self.dpsimpy_busses_dict[self.get_node_name(bus_index)]]
-        )  # [to bus]
+        self.dpsimpy_comp_dict[load_name].append([bus_node])  # [to bus]
 
     def map_shunt(self, index, bus_index):
         # Gs in Matpower represents the MW demanded at V = 1.0 p.u., Bs the MVAr injected at V = 1.0 p.u.

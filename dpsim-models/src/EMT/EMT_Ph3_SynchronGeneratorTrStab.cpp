@@ -40,8 +40,13 @@ EMT::Ph3::SynchronGeneratorTrStab::SynchronGeneratorTrStab(
       mDelta_p(mAttributes->create<Real>("delta_r")),
       mRefOmega(mAttributes->createDynamic<Real>("w_ref")),
       mRefDelta(mAttributes->createDynamic<Real>("delta_ref")) {
+
+  // EMT three-phase component: virtual nodes must be created as ABC nodes.
+  mPhaseType = PhaseType::ABC;
+
   setVirtualNodeNumber(2);
   setTerminalNumber(1);
+
   **mIntfVoltage = Matrix::Zero(3, 1);
   **mIntfCurrent = Matrix::Zero(3, 1);
 
